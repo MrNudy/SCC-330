@@ -1,0 +1,9 @@
+How I got it to work(Windows)
+plug in to USB port in BOOTSEL mode by holding BOOTSEL on the pi pico when plugging in.
+open file explorer and find RPI-RP2 as a new drive (mine was E:/)
+use that as upload_port in the .ini file
+
+if you get the message that it is detected in BOOTSEL and picotool is not able to access it:
+follow this link: https://zadig.akeo.ie/
+Use zadig to set RP2Boot(interface1) driver to WinUSB
+Mine worked after that
