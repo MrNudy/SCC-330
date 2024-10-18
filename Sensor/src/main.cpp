@@ -66,7 +66,10 @@ void setup() {
   display.print("\nWaiting for WiFi... ");
   Serial.print("\nWaiting for WiFi... ");
   while (WiFi.status() != WL_CONNECTED){ //awaits connection to remote server
-  display.println(WiFi.status()); 
+  display.println(WiFi.status());
+  Serial.println(WiFi.status()); 
+  Serial.println(WiFi.scanNetworks());
+  display.println(WiFi.scanNetworks());
       display.print(".");
     Serial.print(".");
     display.display();
