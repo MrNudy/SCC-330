@@ -53,7 +53,7 @@ void setup() {
   display.setTextSize(1);                 //Normal 1:1 pixel scale
   display.setTextColor(SSD1306_WHITE);    //Draw white text
   display.setCursor(0,0);
-  while (!Serial); // Wait until serial is available
+  // while (!Serial); // Wait until serial is available
   sleep_ms(6);//added because this is the minimum time I found that gets all serial message to print(no idea why the line above doesn't fully work)
  
 
@@ -70,7 +70,7 @@ void setup() {
   Serial.println(WiFi.status()); 
   Serial.println(WiFi.scanNetworks());
   display.println(WiFi.scanNetworks());
-      display.print(".");
+    display.print(".");
     Serial.print(".");
     display.display();
     delay(200);
