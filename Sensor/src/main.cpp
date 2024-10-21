@@ -2,15 +2,27 @@
 #include <WiFi.h>
 #include "bme68xLibrary.h"         //This library is not available in PlatformIO
                                    //Library added to lib folder on the left
+#include "Wire.h"
+#include <Adafruit_GFX.h>       //OLED display support library
+#include <Adafruit_SSD1306.h>   //OLED display library
 
-#define     REMOTE_IP          "192.168.6.1"  //remote server IP which that you want to connect to
+//-- defines OLED screen dimensions ---
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+#define OLED_RESET    -1 // Reset pin # 
+#define SCREEN_ADDRESS 0x3C //OLED I2C address
+
+//creates OLED display object "display"
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+#define     REMOTE_IP          "192.168.10.1"  //remote server IP which that you want to connect to
 #define     REMOTE_PORT         5263           //connection port provided on remote server 
 
 #define NEW_GAS_MEAS (BME68X_GASM_VALID_MSK | BME68X_HEAT_STAB_MSK | BME68X_NEW_DATA_MSK)
 
 
-const char* ssid = "Group6BaseStation";     //access Point SSID
-const char* password= "Group6";  //access Point Password
+const char* ssid = "Group6BaseStation";    //Access Point SSID
+const char* password= "group6best"; //Access Point Password
 
 Bme68x bme;                         //declares climate sensor variable
 WiFiClient client;                  //declares WiFi client
@@ -19,9 +31,29 @@ WiFiClient client;                  //declares WiFi client
 void sendClimateData();
 
 void setup() {
-  Wire.begin();
-  Serial.begin(115200);
-  while (!Serial); // Wait until serial is available
+  Wire.begin();         //Initializes the Wire library and join the I2C bus as a controller
+                          //or a peripheral. It is normally be called only once.
+    Serial.begin(115200); //Sets the data rate in bits per second (baud) for serial data transmission. 
+                          //For communicating with Serial Monitor, make sure to use one of the baud ...
+
+    // initializes OLED display 
+    if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) 
+    {
+          display.println(F("SSD1306 allocation failed"));
+      Serial.println(F("SSD1306 allocation failed"));
+      for(;;); // Don't proceed, loop forever
+    }
+
+     // OLED display library initializes this with an Adafruit splash screen.
+     display.display();    //this function must be called at the end of display statements
+     delay(2000);          // pauses for 2 seconds
+
+     // clears the display buffer
+  display.clearDisplay();                 //clears OLED screen
+  display.setTextSize(1);                 //Normal 1:1 pixel scale
+  display.setTextColor(SSD1306_WHITE);    //Draw white text
+  display.setCursor(0,0);
+  // while (!Serial); // Wait until serial is available
   sleep_ms(6);//added because this is the minimum time I found that gets all serial message to print(no idea why the line above doesn't fully work)
  
 
@@ -31,23 +63,53 @@ void setup() {
  
 
   WiFi.begin(ssid, password);       //starts WiFi with access authorisation details
+  display.print("\nWaiting for WiFi... ");
   Serial.print("\nWaiting for WiFi... ");
   while (WiFi.status() != WL_CONNECTED){ //awaits connection to remote server
+  display.println(WiFi.status());
+  Serial.println(WiFi.status()); 
+  Serial.println(WiFi.scanNetworks());
+  display.println(WiFi.scanNetworks());
+    display.print(".");
     Serial.print(".");
-    delay(500);
+    display.display();
+    delay(200);
+    display.print(".");
+    Serial.print(".");
+    delay(200);
+    display.display();
+    display.print(".");
+    Serial.print(".");
+    delay(200);
+    display.display();
+    display.clearDisplay();                 //clears OLED screen
+  display.setTextSize(1);                 //Normal 1:1 pixel scale
+  display.setTextColor(SSD1306_WHITE);    //Draw white text
+  display.setCursor(0,0);
+  display.display();
   }
 
+  display.println("");
   Serial.println("");
+  display.println("WiFi connected");
   Serial.println("WiFi connected");
+  display.println("IP address: ");
   Serial.println("IP address: ");
+  display.println(WiFi.localIP());
   Serial.println(WiFi.localIP());
+  display.display();
   delay(500);
 
+  display.print("Connecting to ");
   Serial.print("Connecting to ");
+  display.println(REMOTE_IP);
   Serial.println(REMOTE_IP);
+  display.display();
 
   while (!client.connect(REMOTE_IP, REMOTE_PORT)) {
+      display.println("Connection failed.");
     Serial.println("Connection failed.");
+      display.println("Waiting a moment before retrying...");
     Serial.println("Waiting a moment before retrying...");
   }
 
@@ -58,12 +120,14 @@ void setup() {
 	  {
 		  if (bme.checkStatus() == BME68X_ERROR)
 		  {
-			  Serial.println("Sensor error:" + bme.statusString());
+              display.println("Sensor error:" + bme.statusString());
+        Serial.println("Sensor error:" + bme.statusString());
 			  return;
 		  }
 		  else if (bme.checkStatus() == BME68X_WARNING)
 		  {
-			  Serial.println("Sensor Warning:" + bme.statusString());
+              display.println("Sensor Warning:" + bme.statusString());
+        Serial.println("Sensor Warning:" + bme.statusString());
 		  }
 	  }
 
@@ -81,11 +145,18 @@ void setup() {
 }
 
 void loop() {
+  
+  display.clearDisplay();                 //clears OLED screen
+  display.setTextSize(1);                 //Normal 1:1 pixel scale
+  display.setTextColor(SSD1306_WHITE);    //Draw white text
+  display.setCursor(0,0);
+
   if (client.available() > 0) 
   {
     delay(20);
     //read back one line from the server
     String line = client.readString();
+      display.println(REMOTE_IP + String(":") + line);
     Serial.println(REMOTE_IP + String(":") + line);
   }
   if (Serial.available() > 0)  
