@@ -12,6 +12,7 @@
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 #define OLED_RESET    -1 // Reset pin # 
 #define SCREEN_ADDRESS 0x3C //OLED I2C address
+<<<<<<< HEAD
 #define SENSOR_MODE 0 // default: environment sensor mode
 
 // light sensor setup
@@ -19,10 +20,18 @@
 BH1745NUC sensor = BH1745NUC();
 
 
+=======
+>>>>>>> main
 
 //creates OLED display object "display"
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+<<<<<<< HEAD
+=======
+#define REDButton 12     //connected to pin GP12
+#define BLACKButton 13   //connected to pin GP13
+
+>>>>>>> main
 #define     REMOTE_IP          "192.168.10.1"  //remote server IP which that you want to connect to
 #define     REMOTE_PORT         5263           //connection port provided on remote server 
 
@@ -36,8 +45,17 @@ Bme68x bme;                         //declares climate sensor variable
 WiFiClient client;                  //declares WiFi client
 
 //declare functions implemented
+<<<<<<< HEAD
 void sendEnvironmentData();
 void readLightMeasurements();
+=======
+void sendClimateData();             //For sending enrironment data to BaseStation
+void sendObjectData();              //For sending object usage data to BaseStation
+void sendCupData();                 //For sending water usage data to BaseStation
+void redButtonPressed();
+void blackButtonPressed();
+void changeMode();                  //On button press change sensor mode
+>>>>>>> main
 
 void setup() {
   Wire.begin();         //Initializes the Wire library and join the I2C bus as a controller
@@ -55,7 +73,10 @@ void setup() {
 
      // OLED display library initializes this with an Adafruit splash screen.
      display.display();    //this function must be called at the end of display statements
+<<<<<<< HEAD
      delay(2000);          // pauses for 2 seconds
+=======
+>>>>>>> main
 
      // clears the display buffer
   display.clearDisplay();                 //clears OLED screen
@@ -63,7 +84,11 @@ void setup() {
   display.setTextColor(SSD1306_WHITE);    //Draw white text
   display.setCursor(0,0);
   // while (!Serial); // Wait until serial is available
+<<<<<<< HEAD
   sleep_ms(6);//added because this is the minimum time I found that gets all serial message to print(no idea why the line above doesn't fully work)
+=======
+  delay(6);//added because this is the minimum time I found that gets all serial message to print(no idea why the line above doesn't fully work)
+>>>>>>> main
  
 
   // Operate in WiFi Station mode
@@ -75,6 +100,7 @@ void setup() {
   display.print("\nWaiting for WiFi... ");
   Serial.print("\nWaiting for WiFi... ");
   while (WiFi.status() != WL_CONNECTED){ //awaits connection to remote server
+<<<<<<< HEAD
   display.println(WiFi.status());
   Serial.println(WiFi.status()); 
   Serial.println(WiFi.scanNetworks());
@@ -96,6 +122,26 @@ void setup() {
   display.setTextColor(SSD1306_WHITE);    //Draw white text
   display.setCursor(0,0);
   display.display();
+=======
+    display.print("\nWaiting for WiFi");
+    display.display();
+    delay(200);
+    display.print(".");
+    //Serial.print(".");
+    display.display();
+    delay(200);
+    display.print(".");
+    //Serial.print(".");
+    display.display();
+    delay(200);
+    display.print(".");
+    //Serial.print(".");
+    display.display();
+    delay(200);
+    display.clearDisplay();                 //clears OLED screen
+    display.setCursor(0,0);
+    display.display();
+>>>>>>> main
   }
 
   display.println("");
@@ -152,15 +198,26 @@ void setup() {
 	  bme.setHeaterProf(tempProf, durProf, 3);
 	  bme.setOpMode(BME68X_SEQUENTIAL_MODE);
 
+<<<<<<< HEAD
     sensor.begin(BH1745NUC_DEVICE_ADDRESS_38);
     sensor.startMeasurement();
+=======
+  pinMode(REDButton, INPUT);
+  pinMode(BLACKButton, INPUT);
+    
+  attachInterrupt(REDButton, redButtonPressed, FALLING);
+  attachInterrupt(BLACKButton, blackButtonPressed, FALLING);
+>>>>>>> main
 }
 
 void loop() {
   
   display.clearDisplay();                 //clears OLED screen
+<<<<<<< HEAD
   display.setTextSize(1);                 //Normal 1:1 pixel scale
   display.setTextColor(SSD1306_WHITE);    //Draw white text
+=======
+>>>>>>> main
   display.setCursor(0,0);
 
   if (client.available() > 0) 
@@ -183,18 +240,25 @@ void loop() {
     WiFi.disconnect();
   }
   else{
-        // sendEnvironmentData();
-        // readLightMeasurements();
-
-    switch (SENSOR_MODE)
-    {
-    case 0: // Environment sensor
-      sendEnvironmentData();
-      readLightMeasurements();
+    switch (mode){
+    case ENVIRONMENT: 
+      sendClimateData();
       break;
-    
+    case OBJECT:
+        sendObjectData();
+      break;
+    case CUP:
+        sendCupData();
+      break;
+    case ACTUATOR:
+      //code for acting as actuator goes here
+     break;
     default:
-      break;
+      display.clearDisplay();
+      display.setCursor(0,0);
+      display.println("Sensor mode error");
+      display.display();
+      delay(300);
     }
   }
   sleep_ms(500);
@@ -202,7 +266,6 @@ void loop() {
 
 void sendEnvironmentData()
 {
-  
   bme68xData data;
   uint8_t nFieldsLeft = 0;
 	delay(150);
@@ -228,9 +291,9 @@ void sendEnvironmentData()
         display.print(F("Temp:     "));
         display.print(String(data.temperature-4.49));
         display.println(F("'C"));
-        // display.print(F("Humidity: "));
-        // display.print(String(data.humidity,2));
-        // display.println(F("%"));
+        display.print(F("Humidity: "));
+        display.print(String(data.humidity,2));
+        display.println(F("%"));
         // display.print(F("Pressure: "));
         // display.print(String(data.pressure,2));
         // display.println(F(" Pa"));
@@ -243,6 +306,69 @@ void sendEnvironmentData()
 	}
 }
 
+void sendObjectData(){
+  //write code here
+}
+
+void sendCupData(){
+  //write code here
+}
+
+void redButtonPressed(){
+  changeMode();
+}
+
+void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use the black button
+  switch (mode){
+    case ENVIRONMENT: 
+      
+      break;
+    case OBJECT:
+        
+      break;
+    case CUP:
+        
+      break;
+    case ACTUATOR:
+      
+     break;
+    default:
+      display.clearDisplay();
+      display.setCursor(0,0);
+      display.println("Sensor mode error");
+      display.display();
+      delay(300);
+    }
+}
+
+void changeMode(){
+  display.clearDisplay();
+  display.setCursor(0,0);
+  switch (mode){
+    case ENVIRONMENT: 
+      mode = OBJECT;
+      display.println("object mode");
+      break;
+    case OBJECT:
+      mode = CUP;
+      display.println("cup mode");
+      break;
+    case CUP:
+      mode = ACTUATOR;
+      display.println("actuator mode");
+      break;
+    case ACTUATOR:
+      mode = ENVIRONMENT;
+      display.println("environment mode");
+     break;
+    default:
+      display.println("mode error");
+    }
+  display.display();
+  delay(300);
+}
+
+<<<<<<< HEAD
 
 void readLightMeasurements()
 {
@@ -280,3 +406,67 @@ void readLightMeasurements()
   display.println(String(rgbc[3]));
   display.display();
 }
+=======
+void sendObjectData(){
+  //write code here
+}
+
+void sendCupData(){
+  //write code here
+}
+
+void redButtonPressed(){
+  changeMode();
+}
+
+void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use the black button
+  switch (mode){
+    case ENVIRONMENT: 
+      
+      break;
+    case OBJECT:
+        
+      break;
+    case CUP:
+        
+      break;
+    case ACTUATOR:
+      
+     break;
+    default:
+      display.clearDisplay();
+      display.setCursor(0,0);
+      display.println("Sensor mode error");
+      display.display();
+      delay(300);
+    }
+}
+
+void changeMode(){
+  display.clearDisplay();
+  display.setCursor(0,0);
+  switch (mode){
+    case ENVIRONMENT: 
+      mode = OBJECT;
+      display.println("object mode");
+      break;
+    case OBJECT:
+      mode = CUP;
+      display.println("cup mode");
+      break;
+    case CUP:
+      mode = ACTUATOR;
+      display.println("actuator mode");
+      break;
+    case ACTUATOR:
+      mode = ENVIRONMENT;
+      display.println("environment mode");
+     break;
+    default:
+      display.println("mode error");
+    }
+  display.display();
+  delay(300);
+}
+
+>>>>>>> main
