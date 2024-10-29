@@ -15,10 +15,21 @@
 //creates OLED display object "display"
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+#define REDButton 12     //connected to pin GP12
+#define BLACKButton 13   //connected to pin GP13
+
 #define     REMOTE_IP          "192.168.10.1"  //remote server IP which that you want to connect to
 #define     REMOTE_PORT         5263           //connection port provided on remote server 
 
 #define NEW_GAS_MEAS (BME68X_GASM_VALID_MSK | BME68X_HEAT_STAB_MSK | BME68X_NEW_DATA_MSK)
+
+enum SENSOR_MODE{
+  ENVIRONMENT,
+  OBJECT,
+  CUP,
+  ACTUATOR
+};
+SENSOR_MODE mode = ENVIRONMENT;
 
 
 const char* ssid = "Group6BaseStation";    //Access Point SSID
@@ -28,7 +39,12 @@ Bme68x bme;                         //declares climate sensor variable
 WiFiClient client;                  //declares WiFi client
 
 //declare functions implemented
-void sendClimateData();
+void sendClimateData();             //For sending enrironment data to BaseStation
+void sendObjectData();              //For sending object usage data to BaseStation
+void sendCupData();                 //For sending water usage data to BaseStation
+void redButtonPressed();
+void blackButtonPressed();
+void changeMode();                  //On button press change sensor mode
 
 void setup() {
   Wire.begin();         //Initializes the Wire library and join the I2C bus as a controller
@@ -46,7 +62,6 @@ void setup() {
 
      // OLED display library initializes this with an Adafruit splash screen.
      display.display();    //this function must be called at the end of display statements
-     delay(2000);          // pauses for 2 seconds
 
      // clears the display buffer
   display.clearDisplay();                 //clears OLED screen
@@ -54,7 +69,7 @@ void setup() {
   display.setTextColor(SSD1306_WHITE);    //Draw white text
   display.setCursor(0,0);
   // while (!Serial); // Wait until serial is available
-  sleep_ms(6);//added because this is the minimum time I found that gets all serial message to print(no idea why the line above doesn't fully work)
+  delay(6);//added because this is the minimum time I found that gets all serial message to print(no idea why the line above doesn't fully work)
  
 
   // Operate in WiFi Station mode
@@ -63,30 +78,26 @@ void setup() {
  
 
   WiFi.begin(ssid, password);       //starts WiFi with access authorisation details
-  display.print("\nWaiting for WiFi... ");
   Serial.print("\nWaiting for WiFi... ");
   while (WiFi.status() != WL_CONNECTED){ //awaits connection to remote server
-  display.println(WiFi.status());
-  Serial.println(WiFi.status()); 
-  Serial.println(WiFi.scanNetworks());
-  display.println(WiFi.scanNetworks());
-    display.print(".");
-    Serial.print(".");
+    display.print("\nWaiting for WiFi");
     display.display();
     delay(200);
     display.print(".");
-    Serial.print(".");
-    delay(200);
+    //Serial.print(".");
     display.display();
+    delay(200);
     display.print(".");
-    Serial.print(".");
-    delay(200);
+    //Serial.print(".");
     display.display();
+    delay(200);
+    display.print(".");
+    //Serial.print(".");
+    display.display();
+    delay(200);
     display.clearDisplay();                 //clears OLED screen
-  display.setTextSize(1);                 //Normal 1:1 pixel scale
-  display.setTextColor(SSD1306_WHITE);    //Draw white text
-  display.setCursor(0,0);
-  display.display();
+    display.setCursor(0,0);
+    display.display();
   }
 
   display.println("");
@@ -142,13 +153,17 @@ void setup() {
 	  bme.setSeqSleep(BME68X_ODR_250_MS);
 	  bme.setHeaterProf(tempProf, durProf, 3);
 	  bme.setOpMode(BME68X_SEQUENTIAL_MODE);
+
+  pinMode(REDButton, INPUT);
+  pinMode(BLACKButton, INPUT);
+    
+  attachInterrupt(REDButton, redButtonPressed, FALLING);
+  attachInterrupt(BLACKButton, blackButtonPressed, FALLING);
 }
 
 void loop() {
   
   display.clearDisplay();                 //clears OLED screen
-  display.setTextSize(1);                 //Normal 1:1 pixel scale
-  display.setTextColor(SSD1306_WHITE);    //Draw white text
   display.setCursor(0,0);
 
   if (client.available() > 0) 
@@ -171,13 +186,31 @@ void loop() {
     WiFi.disconnect();
   }
   else{
-    sendClimateData();
+    switch (mode){
+    case ENVIRONMENT: 
+      sendClimateData();
+      break;
+    case OBJECT:
+        sendObjectData();
+      break;
+    case CUP:
+        sendCupData();
+      break;
+    case ACTUATOR:
+      //code for acting as actuator goes here
+     break;
+    default:
+      display.clearDisplay();
+      display.setCursor(0,0);
+      display.println("Sensor mode error");
+      display.display();
+      delay(300);
+    }
   }
 }
 
 void sendClimateData()
 {
-  
   bme68xData data;
   uint8_t nFieldsLeft = 0;
 	delay(150);
@@ -196,5 +229,67 @@ void sendClimateData()
 			//}
 		} while (nFieldsLeft);
 	}
+}
+
+void sendObjectData(){
+  //write code here
+}
+
+void sendCupData(){
+  //write code here
+}
+
+void redButtonPressed(){
+  changeMode();
+}
+
+void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use the black button
+  switch (mode){
+    case ENVIRONMENT: 
+      
+      break;
+    case OBJECT:
+        
+      break;
+    case CUP:
+        
+      break;
+    case ACTUATOR:
+      
+     break;
+    default:
+      display.clearDisplay();
+      display.setCursor(0,0);
+      display.println("Sensor mode error");
+      display.display();
+      delay(300);
+    }
+}
+
+void changeMode(){
+  display.clearDisplay();
+  display.setCursor(0,0);
+  switch (mode){
+    case ENVIRONMENT: 
+      mode = OBJECT;
+      display.println("object mode");
+      break;
+    case OBJECT:
+      mode = CUP;
+      display.println("cup mode");
+      break;
+    case CUP:
+      mode = ACTUATOR;
+      display.println("actuator mode");
+      break;
+    case ACTUATOR:
+      mode = ENVIRONMENT;
+      display.println("environment mode");
+     break;
+    default:
+      display.println("mode error");
+    }
+  display.display();
+  delay(300);
 }
 
