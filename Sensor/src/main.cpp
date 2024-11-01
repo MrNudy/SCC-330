@@ -39,6 +39,7 @@ Bme68x bme;                         //declares climate sensor variable
 WiFiClient client;                  //declares WiFi client
 
 //declare functions implemented
+void connectToBaseStation();
 void sendClimateData();             //For sending enrironment data to BaseStation
 void sendObjectData();              //For sending object usage data to BaseStation
 void sendCupData();                 //For sending water usage data to BaseStation
@@ -76,53 +77,7 @@ void setup() {
   WiFi.mode(WIFI_STA);              //sets WiFi as station/client
   WiFi.setHostname("Group6Station");
  
-
-  WiFi.begin(ssid, password);       //starts WiFi with access authorisation details
-  Serial.print("\nWaiting for WiFi... ");
-  while (WiFi.status() != WL_CONNECTED){ //awaits connection to remote server
-    display.print("\nWaiting for WiFi");
-    display.display();
-    delay(200);
-    display.print(".");
-    //Serial.print(".");
-    display.display();
-    delay(200);
-    display.print(".");
-    //Serial.print(".");
-    display.display();
-    delay(200);
-    display.print(".");
-    //Serial.print(".");
-    display.display();
-    delay(200);
-    display.clearDisplay();                 //clears OLED screen
-    display.setCursor(0,0);
-    display.display();
-  }
-
-  display.println("");
-  Serial.println("");
-  display.println("WiFi connected");
-  Serial.println("WiFi connected");
-  display.println("IP address: ");
-  Serial.println("IP address: ");
-  display.println(WiFi.localIP());
-  Serial.println(WiFi.localIP());
-  display.display();
-  delay(500);
-
-  display.print("Connecting to ");
-  Serial.print("Connecting to ");
-  display.println(REMOTE_IP);
-  Serial.println(REMOTE_IP);
-  display.display();
-
-  while (!client.connect(REMOTE_IP, REMOTE_PORT)) {
-      display.println("Connection failed.");
-    Serial.println("Connection failed.");
-      display.println("Waiting a moment before retrying...");
-    Serial.println("Waiting a moment before retrying...");
-  }
+  connectToBaseStation();
 
   //initialize climate sensor with I2C address
 	  bme.begin(0x76, Wire);
@@ -154,11 +109,11 @@ void setup() {
 	  bme.setHeaterProf(tempProf, durProf, 3);
 	  bme.setOpMode(BME68X_SEQUENTIAL_MODE);
 
-  pinMode(REDButton, INPUT);
+  pinMode(REDButton, INPUT);            //Set buttons as inputs
   pinMode(BLACKButton, INPUT);
-    
-  attachInterrupt(REDButton, redButtonPressed, FALLING);
-  attachInterrupt(BLACKButton, blackButtonPressed, FALLING);
+  
+  attachInterrupt(REDButton, redButtonPressed, RISING);
+  attachInterrupt(BLACKButton, blackButtonPressed, RISING);
 }
 
 void loop() {
@@ -184,6 +139,7 @@ void loop() {
   {
     client.stop();
     WiFi.disconnect();
+    connectToBaseStation();
   }
   else{
     switch (mode){
@@ -225,7 +181,7 @@ void sendClimateData()
 				client.print(String(data.temperature-4.49) + ", " + String(data.humidity) + ", " + String(data.pressure) + '\n');
 
 				if(data.gas_index == 2) /* Sequential mode sleeps after this measurement */
-					delay(250);
+					delay(1000);
 			//}
 		} while (nFieldsLeft);
 	}
@@ -237,10 +193,6 @@ void sendObjectData(){
 
 void sendCupData(){
   //write code here
-}
-
-void redButtonPressed(){
-  changeMode();
 }
 
 void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use the black button
@@ -264,6 +216,10 @@ void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use
       display.display();
       delay(300);
     }
+}
+
+void redButtonPressed(){
+  changeMode();
 }
 
 void changeMode(){
@@ -293,3 +249,51 @@ void changeMode(){
   delay(300);
 }
 
+void connectToBaseStation(){
+  WiFi.begin(ssid, password);       //starts WiFi with access authorisation details
+  Serial.print("\nWaiting for WiFi... ");
+  while (WiFi.status() != WL_CONNECTED){ //awaits connection to remote server
+    display.print("\nWaiting for WiFi");
+    display.display();
+    delay(200);
+    display.print(".");
+    //Serial.print(".");
+    display.display();
+    delay(200);
+    display.print(".");
+    //Serial.print(".");
+    display.display();
+    delay(200);
+    display.print(".");
+    //Serial.print(".");
+    display.display();
+    delay(200);
+    display.clearDisplay();                 //clears OLED screen
+    display.setCursor(0,0);
+    display.display();
+  }
+
+  display.println("");
+  Serial.println("");
+  display.println("WiFi connected");
+  Serial.println("WiFi connected");
+  display.println("IP address: ");
+  Serial.println("IP address: ");
+  display.println(WiFi.localIP());
+  Serial.println(WiFi.localIP());
+  display.display();
+  delay(500);
+
+  display.print("Connecting to ");
+  Serial.print("Connecting to ");
+  display.println(REMOTE_IP);
+  Serial.println(REMOTE_IP);
+  display.display();
+
+  while (!client.connect(REMOTE_IP, REMOTE_PORT)) {
+    display.println("Connection failed.");
+    Serial.println("Connection failed.");
+    display.println("Waiting a moment before retrying...");
+    Serial.println("Waiting a moment before retrying...");
+  }
+}
