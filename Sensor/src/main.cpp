@@ -48,7 +48,6 @@ void redButtonPressed();
 void blackButtonPressed();
 void changeMode();                  //On button press change sensor mode
 
-int temp = 0;
 void setup() {
   Wire.begin();         //Initializes the Wire library and join the I2C bus as a controller
                           //or a peripheral. It is normally be called only once.
@@ -162,15 +161,16 @@ void loop() {
 void sendClimateData()
 {
   while(!connectToBaseStation());
-  client.print(String(temp) + '\n');
-  temp++;
+  //write code here
 }
 
 void sendObjectData(){
+  while(!connectToBaseStation());
   //write code here
 }
 
 void sendCupData(){
+  while(!connectToBaseStation());
   //write code here
 }
 
