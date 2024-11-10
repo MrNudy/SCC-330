@@ -39,7 +39,8 @@ Bme68x bme;                         //declares climate sensor variable
 WiFiClient client;                  //declares WiFi client
 
 //declare functions implemented
-void connectToBaseStation();
+bool connectToBaseStation();
+void connectWiFi();
 void sendClimateData();             //For sending enrironment data to BaseStation
 void sendObjectData();              //For sending object usage data to BaseStation
 void sendCupData();                 //For sending water usage data to BaseStation
@@ -47,6 +48,7 @@ void redButtonPressed();
 void blackButtonPressed();
 void changeMode();                  //On button press change sensor mode
 
+int temp = 0;
 void setup() {
   Wire.begin();         //Initializes the Wire library and join the I2C bus as a controller
                           //or a peripheral. It is normally be called only once.
@@ -112,15 +114,13 @@ void setup() {
   pinMode(REDButton, INPUT);            //Set buttons as inputs
   pinMode(BLACKButton, INPUT);
   
-  attachInterrupt(REDButton, redButtonPressed, RISING);
-  attachInterrupt(BLACKButton, blackButtonPressed, RISING);
+  attachInterrupt(REDButton, redButtonPressed, FALLING);
+  attachInterrupt(BLACKButton, blackButtonPressed, FALLING);
 }
 
 void loop() {
-  
   display.clearDisplay();                 //clears OLED screen
   display.setCursor(0,0);
-
   if (client.available() > 0) 
   {
     delay(20);
@@ -135,56 +135,35 @@ void loop() {
     String line = Serial.readString();
     client.print(line);
   }
-  if (client.connected () == 0) 
-  {
-    client.stop();
-    WiFi.disconnect();
-    connectToBaseStation();
+  switch (mode){
+  case ENVIRONMENT: 
+    sendClimateData();
+    break;
+  case OBJECT:
+      sendObjectData();
+    break;
+  case CUP:
+      sendCupData();
+    break;
+  case ACTUATOR:
+    //code for acting as actuator goes here
+  break;
+  default:
+    display.clearDisplay();
+    display.setCursor(0,0);
+    display.println("Sensor mode error");
+    display.display();
+    delay(300);
   }
-  else{
-    switch (mode){
-    case ENVIRONMENT: 
-      sendClimateData();
-      break;
-    case OBJECT:
-        sendObjectData();
-      break;
-    case CUP:
-        sendCupData();
-      break;
-    case ACTUATOR:
-      //code for acting as actuator goes here
-     break;
-    default:
-      display.clearDisplay();
-      display.setCursor(0,0);
-      display.println("Sensor mode error");
-      display.display();
-      delay(300);
-    }
-  }
+  
+  
 }
 
 void sendClimateData()
 {
-  bme68xData data;
-  uint8_t nFieldsLeft = 0;
-	delay(150);
-
-	if (bme.fetchData())
-	{
-		do
-		{
-			nFieldsLeft = bme.getData(data);
-			//if (data.status == NEW_GAS_MEAS)
-			//{
-				client.print(String(data.temperature-4.49) + ", " + String(data.humidity) + ", " + String(data.pressure) + '\n');
-
-				if(data.gas_index == 2) /* Sequential mode sleeps after this measurement */
-					delay(1000);
-			//}
-		} while (nFieldsLeft);
-	}
+  while(!connectToBaseStation());
+  client.print(String(temp) + '\n');
+  temp++;
 }
 
 void sendObjectData(){
@@ -198,7 +177,8 @@ void sendCupData(){
 void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use the black button
   switch (mode){
     case ENVIRONMENT: 
-      
+      display.println(WiFi.status());
+      display.display();
       break;
     case OBJECT:
         
@@ -249,51 +229,27 @@ void changeMode(){
   delay(300);
 }
 
-void connectToBaseStation(){
+bool connectToBaseStation(){
+  connectWiFi();
+  while (!client.connect(REMOTE_IP, REMOTE_PORT)) {
+    display.clearDisplay();                 //clears OLED screen
+    display.setCursor(0,0);
+    if(WiFi.status() != WL_CONNECTED){
+      connectWiFi();
+    }
+  }
+  return true;
+}
+
+void connectWiFi(){
   WiFi.begin(ssid, password);       //starts WiFi with access authorisation details
   Serial.print("\nWaiting for WiFi... ");
   while (WiFi.status() != WL_CONNECTED){ //awaits connection to remote server
-    display.print("\nWaiting for WiFi");
-    display.display();
-    delay(200);
-    display.print(".");
-    //Serial.print(".");
-    display.display();
-    delay(200);
-    display.print(".");
-    //Serial.print(".");
-    display.display();
-    delay(200);
-    display.print(".");
-    //Serial.print(".");
-    display.display();
-    delay(200);
     display.clearDisplay();                 //clears OLED screen
     display.setCursor(0,0);
     display.display();
-  }
-
-  display.println("");
-  Serial.println("");
-  display.println("WiFi connected");
-  Serial.println("WiFi connected");
-  display.println("IP address: ");
-  Serial.println("IP address: ");
-  display.println(WiFi.localIP());
-  Serial.println(WiFi.localIP());
-  display.display();
-  delay(500);
-
-  display.print("Connecting to ");
-  Serial.print("Connecting to ");
-  display.println(REMOTE_IP);
-  Serial.println(REMOTE_IP);
-  display.display();
-
-  while (!client.connect(REMOTE_IP, REMOTE_PORT)) {
-    display.println("Connection failed.");
-    Serial.println("Connection failed.");
-    display.println("Waiting a moment before retrying...");
-    Serial.println("Waiting a moment before retrying...");
+    display.print("\nWaiting for WiFi");
+    display.display();
+    delay(200);
   }
 }
