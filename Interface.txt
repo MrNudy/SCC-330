@@ -2,17 +2,17 @@ Interface for DB send as string in the format
 replace <> with data
 
 Environmental data:
-"E:<Light>,<Sound>,<Temp>"
+"E:<Light>,<Sound>,<Temp>\n"
 
 Object:
-"O:'<object>'"
+"O:'<object>'\n"
 
 tripwire:
-"T:<zone>"
+"T:<zone>\n"
 
 Cup:
-"C:<ml used>"
+"C:<ml used>\n"
 {Note: - for when refilled}
 
 Actuator:
-"A:<Level>"
+"A:<Level>\n"

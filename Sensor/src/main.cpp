@@ -46,6 +46,8 @@ Bme68x bme;                         //declares climate sensor variable
 WiFiClient client;                  //declares WiFi client
 
 //declare functions implemented
+bool connectToBaseStation();
+void connectWiFi();
 void sendClimateData();             //For sending enrironment data to BaseStation
 void sendObjectData();              //For sending object usage data to BaseStation
 void sendCupData();                 //For sending water usage data to BaseStation
@@ -71,69 +73,20 @@ void setup() {
     // OLED display library initializes this with an Adafruit splash screen.
     display.display();    //this function must be called at the end of display statements
 
-    // clears the display buffer
-    display.clearDisplay();                 //clears OLED screen
-    display.setTextSize(1);                 //Normal 1:1 pixel scale
-    display.setTextColor(SSD1306_WHITE);    //Draw white text
-    display.setCursor(0, 0);
-    // while (!Serial); // Wait until serial is available
-    delay(6);//added because this is the minimum time I found that gets all serial message to print(no idea why the line above doesn't fully work)
+     // clears the display buffer
+  display.clearDisplay();                 //clears OLED screen
+  display.setTextSize(1);                 //Normal 1:1 pixel scale
+  display.setTextColor(SSD1306_WHITE);    //Draw white text
+  display.setCursor(0,0);
+  // while (!Serial); // Wait until serial is available
+  delay(6);//added because this is the minimum time I found that gets all serial message to print(no idea why the line above doesn't fully work)
+ 
 
-
-    // Operate in WiFi Station mode
-    WiFi.mode(WIFI_STA);              //sets WiFi as station/client
-    WiFi.setHostname("Group6Station");
-
-
-    WiFi.begin(ssid, password);       //starts WiFi with access authorisation details
-    Serial.print("\nWaiting for WiFi... ");
-    while (WiFi.status() != WL_CONNECTED) { //awaits connection to remote server
-        display.print("\nWaiting for WiFi");
-        display.display();
-        delay(200);
-        display.print(".");
-        //Serial.print(".");
-        display.display();
-        delay(200);
-        display.print(".");
-        //Serial.print(".");
-        display.display();
-        delay(200);
-        display.print(".");
-        //Serial.print(".");
-        display.display();
-        delay(200);
-        display.clearDisplay();                 //clears OLED screen
-        display.setCursor(0, 0);
-        display.display();
-    }
-
-    display.println("");
-    Serial.println("");
-    display.println("WiFi connected");
-    Serial.println("WiFi connected");
-    display.println("IP address: ");
-    Serial.println("IP address: ");
-    display.println(WiFi.localIP());
-    Serial.println(WiFi.localIP());
-    display.display();
-    delay(500);
-
-    display.print("Connecting to ");
-    Serial.print("Connecting to ");
-    display.println(REMOTE_IP);
-    Serial.println(REMOTE_IP);
-    display.display();
-
-    while (!client.connect(REMOTE_IP, REMOTE_PORT)) {
-        display.println("Connection failed.");
-        Serial.println("Connection failed.");
-        display.println("Waiting a moment before retrying...");
-        Serial.println("Waiting a moment before retrying...");
-    }
-
-    //initialize climate sensor with I2C address
-    bme.begin(0x76, Wire);
+  // Operate in WiFi Station mode
+  WiFi.mode(WIFI_STA);              //sets WiFi as station/client
+  WiFi.setHostname("Group6Station");
+ 
+  connectToBaseStation();
 
     if (bme.checkStatus())
     {
@@ -166,95 +119,78 @@ void setup() {
     pinMode(BLACKButton, INPUT);
     pinMode(MOTION_SENSOR, INPUT);
 
-    attachInterrupt(REDButton, redButtonPressed, FALLING);
-    attachInterrupt(BLACKButton, blackButtonPressed, FALLING);
+  pinMode(REDButton, INPUT);            //Set buttons as inputs
+  pinMode(BLACKButton, INPUT);
+  
+  attachInterrupt(REDButton, redButtonPressed, FALLING);
+  attachInterrupt(BLACKButton, blackButtonPressed, FALLING);
 }
 
 void loop() {
-
-    display.clearDisplay();                 //clears OLED screen
-    display.setCursor(0, 0);
-
-    if (client.available() > 0)
-    {
-        delay(20);
-        //read back one line from the server
-        String line = client.readString();
-        display.println(REMOTE_IP + String(":") + line);
-        Serial.println(REMOTE_IP + String(":") + line);
-    }
-    if (Serial.available() > 0)
-    {
-        delay(20);
-        String line = Serial.readString();
-        client.print(line);
-    }
-    if (client.connected() == 0)
-    {
-        client.stop();
-        WiFi.disconnect();
-    }
-    else {
-        switch (mode) {
-        case ENVIRONMENT:
-            sendClimateData();
-            break;
-        case OBJECT:
-            sendObjectData();
-            break;
-        case CUP:
-            sendCupData();
-            break;
-        case ACTUATOR:
-            //code for acting as actuator goes here
-            break;
-        case TRIPWIRE:
-            sendZoneTriggeredData();
-            break;
-        default:
-            display.clearDisplay();
-            display.setCursor(0, 0);
-            display.println("Sensor mode error");
-            display.display();
-            delay(300);
-        }
-    }
+  display.clearDisplay();                 //clears OLED screen
+  display.setCursor(0,0);
+  if (client.available() > 0) 
+  {
+    delay(20);
+    //read back one line from the server
+    String line = client.readString();
+      display.println(REMOTE_IP + String(":") + line);
+    Serial.println(REMOTE_IP + String(":") + line);
+  }
+  if (Serial.available() > 0)  
+  {
+    delay(20);
+    String line = Serial.readString();
+    client.print(line);
+  }
+  switch (mode){
+  case ENVIRONMENT: 
+    sendClimateData();
+    break;
+  case OBJECT:
+      sendObjectData();
+    break;
+  case CUP:
+      sendCupData();
+    break;
+  case ACTUATOR:
+    //code for acting as actuator goes here
+  break;
+  case TRIPWIRE:
+      sendZoneTriggeredData();
+    break;
+  default:
+    display.clearDisplay();
+    display.setCursor(0,0);
+    display.println("Sensor mode error");
+    display.display();
+    delay(300);
+  }
+  
+  
 }
 
 void sendClimateData()
 {
-    bme68xData data;
-    uint8_t nFieldsLeft = 0;
-    delay(150);
-
-    if (bme.fetchData())
-    {
-        do
-        {
-            nFieldsLeft = bme.getData(data);
-            //if (data.status == NEW_GAS_MEAS)
-            //{
-            client.print(String(data.temperature - 4.49) + ", " + String(data.humidity) + ", " + String(data.pressure) + '\n');
-
-            if (data.gas_index == 2) /* Sequential mode sleeps after this measurement */
-                delay(250);
-            //}
-        } while (nFieldsLeft);
-    }
+  while(!connectToBaseStation());
+  //write code here
 }
 
-void sendObjectData() {
-    //write code here
+void sendObjectData(){
+  while(!connectToBaseStation());
+  //write code here
 }
 
-void sendCupData() {
-    //write code here
+void sendCupData(){
+  while(!connectToBaseStation());
+  //write code here
 }
 
 void sendZoneTriggeredData() {
     motionValue = digitalRead(MOTION_SENSOR);
     if (motionValue == HIGH) {
-        client.print("T: Zone %d", zone);
+        while(!connectToBaseStation());
+        client.print("T:" + String(zone) + "\n");
         if (pirState == LOW) {
             pirState = HIGH;
         }
@@ -266,24 +202,21 @@ void sendZoneTriggeredData() {
     }
 }
 
-void redButtonPressed() {
-    changeMode();
-}
-
-void blackButtonPressed() { //Anyone who wants an input for their sensor mode use the black button
-    switch (mode) {
-    case ENVIRONMENT:
-
-        break;
+void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use the black button
+  switch (mode){
+    case ENVIRONMENT: 
+      display.println(WiFi.status());
+      display.display();
+      break;
     case OBJECT:
-
-        break;
+        
+      break;
     case CUP:
-
-        break;
+        
+      break;
     case ACTUATOR:
-
-        break;
+      
+     break;
     case TRIPWIRE:
         zone++;
         if (zone == 3) {
@@ -299,44 +232,73 @@ void blackButtonPressed() { //Anyone who wants an input for their sensor mode us
             display.println("Zone changed, new zone: 1");
             Serial.println("Zone changed, new zone: 1");
         }
-        break;
-    default:
-        display.clearDisplay();
-        display.setCursor(0, 0);
-        display.println("Sensor mode error");
         display.display();
-        delay(300);
+      break;
+    default:
+      display.clearDisplay();
+      display.setCursor(0,0);
+      display.println("Sensor mode error");
+      display.display();
+      delay(300);
     }
+}
+
+void redButtonPressed(){
+  changeMode();
 }
 
 void changeMode() {
-    display.clearDisplay();
-    display.setCursor(0, 0);
-    switch (mode) {
-    case ENVIRONMENT:
-        mode = OBJECT;
-        display.println("object mode");
-        break;
-    case OBJECT:
-        mode = CUP;
-        display.println("cup mode");
-        break;
-    case CUP:
-        mode = ACTUATOR;
-        display.println("actuator mode");
-        break;
-    case ACTUATOR:
-        mode = TRIPWIRE;
-        display.println("tripwire mode");
-        break;
-    case TRIPWIRE:
-        mode = ENVIRONMENT;
-        display.println("environment mode");
-        break;
-    default:
-        display.println("mode error");
-    }
-    display.display();
-    delay(300);
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  switch (mode) {
+  case ENVIRONMENT:
+    mode = OBJECT;
+    display.println("object mode");
+    break;
+  case OBJECT:
+    mode = CUP;
+    display.println("cup mode");
+    break;
+  case CUP:
+    mode = ACTUATOR;
+    display.println("actuator mode");
+    break;
+  case ACTUATOR:
+    mode = TRIPWIRE;
+    display.println("tripwire mode");
+    break;
+  case TRIPWIRE:
+    mode = ENVIRONMENT;
+    display.println("environment mode");
+    break;
+  default:
+    display.println("mode error");
+  }
+  display.display();
+  delay(300);
 }
 
+bool connectToBaseStation(){
+  connectWiFi();
+  while (!client.connect(REMOTE_IP, REMOTE_PORT)) {
+    display.clearDisplay();                 //clears OLED screen
+    display.setCursor(0,0);
+    if(WiFi.status() != WL_CONNECTED){
+      connectWiFi();
+    }
+  }
+  return true;
+}
+
+void connectWiFi(){
+  WiFi.begin(ssid, password);       //starts WiFi with access authorisation details
+  Serial.print("\nWaiting for WiFi... ");
+  while (WiFi.status() != WL_CONNECTED){ //awaits connection to remote server
+    display.clearDisplay();                 //clears OLED screen
+    display.setCursor(0,0);
+    display.display();
+    display.print("\nWaiting for WiFi");
+    display.display();
+    delay(200);
+  }
+}
