@@ -186,6 +186,22 @@ void sendCupData(){
   //write code here
 }
 
+void sendZoneTriggeredData() {
+    motionValue = digitalRead(MOTION_SENSOR);
+    if (motionValue == HIGH) {
+        while(!connectToBaseStation());
+        client.print("T:" + String(zone) + "\n");
+        if (pirState == LOW) {
+            pirState = HIGH;
+        }
+    }
+    else {
+        if (pirState == HIGH) {
+            pirState = LOW;
+        }
+    }
+}
+
 void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use the black button
   switch (mode){
     case ENVIRONMENT: 
@@ -229,21 +245,6 @@ void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use
 
 void redButtonPressed(){
   changeMode();
-}
-
-void sendZoneTriggeredData() {
-    motionValue = digitalRead(MOTION_SENSOR);
-    if (motionValue == HIGH) {
-        client.print("T:" + String(zone) + "\n");
-        if (pirState == LOW) {
-            pirState = HIGH;
-        }
-    }
-    else {
-        if (pirState == HIGH) {
-            pirState = LOW;
-        }
-    }
 }
 
 void changeMode() {
