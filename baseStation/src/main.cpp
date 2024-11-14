@@ -9,6 +9,14 @@ void software_reset();
 
 String status = "Connected";
 
+enum OBSERVING_OBJECT {
+    CHAIR,
+    DOOR,
+    RUBBISH_BIN,//BIN is already a keyword
+    TABLE,
+    CUPBOARD
+};
+
 const char* ap_ssid = "Group6BaseStation";    //Access Point SSID
 const char* ap_password= "group6best"; //Access Point Password
 
