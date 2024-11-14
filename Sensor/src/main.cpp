@@ -5,9 +5,10 @@
 #include "Wire.h"
 #include <Adafruit_GFX.h>       //OLED display support library
 #include <Adafruit_SSD1306.h>   //OLED display library
-#include <FS.h>  // File system library
-#include <LittleFS.h>  // File system for the Pico
-#include <RTClib.h>  // Real-time clock library
+#include <SD.h>  // File system library
+#include <SPI.h>  // File system for the Pico
+
+#include "SDCard.h" // SD card class
 
 //-- defines OLED screen dimensions ---
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -17,6 +18,8 @@
 
 //creates OLED display object "display"
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+SDCard sdCard;
 
 #define REDButton 12     //connected to pin GP12
 #define BLACKButton 13   //connected to pin GP13
@@ -54,6 +57,8 @@ void setup() {
                           //or a peripheral. It is normally be called only once.
     Serial.begin(115200); //Sets the data rate in bits per second (baud) for serial data transmission. 
                           //For communicating with Serial Monitor, make sure to use one of the baud ...
+
+  sdCard.setup();
 
     // initializes OLED display 
     if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) 
@@ -212,6 +217,13 @@ void loop() {
   }
 }
 
+void displayData(String dataLine){
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.println(dataLine);
+  display.display();
+}
+
 void sendClimateData() {
   bme68xData data;
   uint8_t nFieldsLeft = 0;
@@ -224,52 +236,69 @@ void sendClimateData() {
       float humidity = data.humidity;
       float pressure = data.pressure;
 
-      DateTime now = rtc.now();
-      String dateTime = String(now.year()) + "-" + String(now.month()) + "-" + String(now.day()) + " " +
-                        String(now.hour()) + ":" + String(now.minute()) + ":" + String(now.second());
-      String dataLine = dateTime + ", " + String(temperature) + ", " + String(humidity) + ", " + String(pressure);
+      //DateTime now = rtc.now();
+      //String dateTime = String(now.year()) + "-" + String(now.month()) + "-" + String(now.day()) + " " +
+      //                  String(now.hour()) + ":" + String(now.minute()) + ":" + String(now.second());
+      //String dataLine = dateTime + ", " + String(temperature) + ", " + String(humidity) + ", " + String(pressure);
+      String dataLine = String(temperature) + ", " + String(humidity) + ", " + String(pressure);
       client.print(dataLine + '\n');
+      //display.clearDisplay();                 //clears OLED screen
+      //display.setCursor(0,0);
 
-      File dataFile = LittleFS.open("/climate_data.txt", "a+");
-      if (dataFile) {
-        dataFile.println(dataLine);
-        dataFile.close();
-        Serial.println("Data saved to file.");
-      } else {
-        Serial.println("Error opening climate_data.txt");
+      sdCard.writeData(dataLine);  // new line calling SDCard
+      //display.println("Please help me");
+      //display.display();
+
+      String* fileData = sdCard.getData();
+      for(int i = 0; i < 287; i++){  //DATA_SIZE from SDCard.h
+        if (fileData[i] != ""){
+          display.clearDisplay();
+          display.setCursor(0,0);
+          display.println("getting " + String(i));
+          delay(1000);
+          display.print(fileData[i]);
+          display.display();
+        } else{
+          break;
+        }
       }
-      removeOldEntries();
+
+      
+
+
+      
+//      removeOldEntries();
       if (data.gas_index == 2) delay(250);
     } while (nFieldsLeft);
   }
 }
 
-void removeOldEntries() {
-  File dataFile = LittleFS.open("/climate_data.txt", "r");
-  if (!dataFile) {
-    Serial.println("Error reading climate_data.txt");
-    return;
-  }
-  DateTime now = rtc.now();
-  String newContent = "";
-  while (dataFile.available()) {
-    String line = dataFile.readStringUntil('\n');
-    int year, month, day, hour, minute, second;
-    sscanf(line.c_str(), "%d-%d-%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second);
-    DateTime entryTime(year, month, day, hour, minute, second);
-    if ((now - entryTime).totalseconds() <= 86400) {
-      newContent += line + '\n';
-    }
-  }
-  dataFile.close();
-  dataFile = LittleFS.open("/climate_data.txt", "w");
-  if (dataFile) {
-    dataFile.print(newContent);
-    dataFile.close();
-  } else {
-    Serial.println("Error writing climate_data.txt");
-  }
-}
+// void removeOldEntries() {
+//   File dataFile = LittleFS.open("/climate_data.txt", "r");
+//   if (!dataFile) {
+//     Serial.println("Error reading climate_data.txt");
+//     return;
+//   }
+//   DateTime now = rtc.now();
+//   String newContent = "";
+//   while (dataFile.available()) {
+//     String line = dataFile.readStringUntil('\n');
+//     int year, month, day, hour, minute, second;
+//     sscanf(line.c_str(), "%d-%d-%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second);
+//     DateTime entryTime(year, month, day, hour, minute, second);
+//     if ((now - entryTime).totalseconds() <= 86400) {
+//       newContent += line + '\n';
+//     }
+//   }
+//   dataFile.close();
+//   dataFile = LittleFS.open("/climate_data.txt", "w");
+//   if (dataFile) {
+//     dataFile.print(newContent);
+//     dataFile.close();
+//   } else {
+//     Serial.println("Error writing climate_data.txt");
+//   }
+// }
 
 void sendObjectData(){
   //write code here
