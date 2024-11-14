@@ -1,29 +1,31 @@
 #include <Arduino.h>
 #include <WiFi.h>
-#include "bme68xLibrary.h"         //This library is not available in PlatformIO
-                                   //Library added to lib folder on the left
+#include "bme68xLibrary.h" // Climate sensor library
 #include "Wire.h"
-#include <Adafruit_GFX.h>       //OLED display support library
-#include <Adafruit_SSD1306.h>   //OLED display library
+#include <Adafruit_GFX.h> // OLED display support library
+#include <Adafruit_SSD1306.h> // OLED display library
 
-//-- defines OLED screen dimensions ---
-#define SCREEN_WIDTH 128 // OLED display width, in pixels
-#define SCREEN_HEIGHT 64 // OLED display height, in pixels
-#define OLED_RESET    -1 // Reset pin # 
-#define SCREEN_ADDRESS 0x3C //OLED I2C address
+// OLED display settings
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+#define SCREEN_ADDRESS 0x3C
 
-//creates OLED display object "display"
+// OLED display object
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-#define REDButton 12     //connected to pin GP12
-#define BLACKButton 13   //connected to pin GP13
-
-#define     REMOTE_IP          "192.168.10.1"  //remote server IP which that you want to connect to
-#define     REMOTE_PORT         5263           //connection port provided on remote server 
+// Button and server definitions
+#define REDButton 12
+#define BLACKButton 13
+#define REMOTE_IP "192.168.10.1"
+#define REMOTE_PORT 5263
+#define API_SERVER_IP "192.168.1.1"
+#define API_SERVER_PORT 5000
 
 #define NEW_GAS_MEAS (BME68X_GASM_VALID_MSK | BME68X_HEAT_STAB_MSK | BME68X_NEW_DATA_MSK)
 
-enum SENSOR_MODE{
+// Modes
+enum SENSOR_MODE {
   ENVIRONMENT,
   OBJECT,
   CUP,
@@ -31,265 +33,198 @@ enum SENSOR_MODE{
 };
 SENSOR_MODE mode = ENVIRONMENT;
 
+const char* ssid = "Group6BaseStation";
+const char* password = "group6best";
 
-const char* ssid = "Group6BaseStation";    //Access Point SSID
-const char* password= "group6best"; //Access Point Password
+// Initialize sensor, WiFi clients, and functions
+Bme68x bme;
+WiFiClient baseStationClient; // client for base station
+WiFiClient apiClient; // client for API server
 
-Bme68x bme;                         //declares climate sensor variable
-WiFiClient client;                  //declares WiFi client
-
-//declare functions implemented
-void sendClimateData();             //For sending enrironment data to BaseStation
-void sendObjectData();              //For sending object usage data to BaseStation
-void sendCupData();                 //For sending water usage data to BaseStation
+void sendClimateData();
+void sendObjectData();
+void sendCupData();
 void redButtonPressed();
 void blackButtonPressed();
-void changeMode();                  //On button press change sensor mode
+void changeMode();
 
 void setup() {
-  Wire.begin();         //Initializes the Wire library and join the I2C bus as a controller
-                          //or a peripheral. It is normally be called only once.
-    Serial.begin(115200); //Sets the data rate in bits per second (baud) for serial data transmission. 
-                          //For communicating with Serial Monitor, make sure to use one of the baud ...
+  Wire.begin();
+  Serial.begin(115200);
 
-    // initializes OLED display 
-    if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) 
-    {
-          display.println(F("SSD1306 allocation failed"));
-      Serial.println(F("SSD1306 allocation failed"));
-      for(;;); // Don't proceed, loop forever
-    }
-
-     // OLED display library initializes this with an Adafruit splash screen.
-     display.display();    //this function must be called at the end of display statements
-
-     // clears the display buffer
-  display.clearDisplay();                 //clears OLED screen
-  display.setTextSize(1);                 //Normal 1:1 pixel scale
-  display.setTextColor(SSD1306_WHITE);    //Draw white text
-  display.setCursor(0,0);
-  // while (!Serial); // Wait until serial is available
-  delay(6);//added because this is the minimum time I found that gets all serial message to print(no idea why the line above doesn't fully work)
- 
-
-  // Operate in WiFi Station mode
-  WiFi.mode(WIFI_STA);              //sets WiFi as station/client
-  WiFi.setHostname("Group6Station");
- 
-
-  WiFi.begin(ssid, password);       //starts WiFi with access authorisation details
-  Serial.print("\nWaiting for WiFi... ");
-  while (WiFi.status() != WL_CONNECTED){ //awaits connection to remote server
-    display.print("\nWaiting for WiFi");
-    display.display();
-    delay(200);
-    display.print(".");
-    //Serial.print(".");
-    display.display();
-    delay(200);
-    display.print(".");
-    //Serial.print(".");
-    display.display();
-    delay(200);
-    display.print(".");
-    //Serial.print(".");
-    display.display();
-    delay(200);
-    display.clearDisplay();                 //clears OLED screen
-    display.setCursor(0,0);
-    display.display();
+  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    while (true); // halt on error
   }
 
-  display.println("");
-  Serial.println("");
-  display.println("WiFi connected");
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  delay(6);
+
+  // WiFi setup
+  WiFi.mode(WIFI_STA);
+  WiFi.setHostname("Group6Station");
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    display.print(".");
+    display.display();
+    delay(200);
+  }
+
   Serial.println("WiFi connected");
+  display.println("WiFi connected");
   display.println("IP address: ");
-  Serial.println("IP address: ");
   display.println(WiFi.localIP());
-  Serial.println(WiFi.localIP());
   display.display();
   delay(500);
 
-  display.print("Connecting to ");
-  Serial.print("Connecting to ");
-  display.println(REMOTE_IP);
-  Serial.println(REMOTE_IP);
-  display.display();
-
-  while (!client.connect(REMOTE_IP, REMOTE_PORT)) {
-      display.println("Connection failed.");
-    Serial.println("Connection failed.");
-      display.println("Waiting a moment before retrying...");
-    Serial.println("Waiting a moment before retrying...");
+  // Connect to base station
+  while (!baseStationClient.connect(REMOTE_IP, REMOTE_PORT)) {
+    Serial.println("Connection to base station failed, retrying...");
+    delay(500);
   }
 
-  //initialize climate sensor with I2C address
-	  bme.begin(0x76, Wire);
+  // Connect to API server
+  while (!apiClient.connect(API_SERVER_IP, API_SERVER_PORT)) {
+    Serial.println("Connection to API server failed, retrying...");
+    delay(500);
+  }
 
-	  if(bme.checkStatus())
-	  {
-		  if (bme.checkStatus() == BME68X_ERROR)
-		  {
-              display.println("Sensor error:" + bme.statusString());
-        Serial.println("Sensor error:" + bme.statusString());
-			  return;
-		  }
-		  else if (bme.checkStatus() == BME68X_WARNING)
-		  {
-              display.println("Sensor Warning:" + bme.statusString());
-        Serial.println("Sensor Warning:" + bme.statusString());
-		  }
-	  }
-
-	  //sets the default configuration for temperature, pressure and humidity
-	  bme.setTPH();
-
-	  //sets sensor heater temperature in degree Celsius 
-	  uint16_t tempProf[10] = { 100, 200, 320 };
-	  //sets heating duration in milliseconds 
-	  uint16_t durProf[10] = { 150, 150, 150 };
-
-	  bme.setSeqSleep(BME68X_ODR_250_MS);
-	  bme.setHeaterProf(tempProf, durProf, 3);
-	  bme.setOpMode(BME68X_SEQUENTIAL_MODE);
+  // Initialize climate sensor
+  bme.begin(0x76, Wire);
+  if (bme.checkStatus()) {
+    if (bme.checkStatus() == BME68X_ERROR) {
+      Serial.println("Sensor error: " + bme.statusString());
+      return;
+    } else if (bme.checkStatus() == BME68X_WARNING) {
+      Serial.println("Sensor warning: " + bme.statusString());
+    }
+  }
+  bme.setTPH();
+  uint16_t tempProf[10] = {100, 200, 320};
+  uint16_t durProf[10] = {150, 150, 150};
+  bme.setSeqSleep(BME68X_ODR_250_MS);
+  bme.setHeaterProf(tempProf, durProf, 3);
+  bme.setOpMode(BME68X_SEQUENTIAL_MODE);
 
   pinMode(REDButton, INPUT);
   pinMode(BLACKButton, INPUT);
-    
   attachInterrupt(REDButton, redButtonPressed, FALLING);
   attachInterrupt(BLACKButton, blackButtonPressed, FALLING);
 }
 
 void loop() {
-  
-  display.clearDisplay();                 //clears OLED screen
-  display.setCursor(0,0);
+  display.clearDisplay();
+  display.setCursor(0, 0);
 
-  if (client.available() > 0) 
-  {
+  if (baseStationClient.available() > 0) {
     delay(20);
-    //read back one line from the server
-    String line = client.readString();
-      display.println(REMOTE_IP + String(":") + line);
+    String line = baseStationClient.readString();
+    display.println(REMOTE_IP + String(":") + line);
     Serial.println(REMOTE_IP + String(":") + line);
   }
-  if (Serial.available() > 0)  
-  {
+  if (Serial.available() > 0) {
     delay(20);
     String line = Serial.readString();
-    client.print(line);
+    baseStationClient.print(line);
   }
-  if (client.connected () == 0) 
-  {
-    client.stop();
+
+  if (!baseStationClient.connected()) {
+    baseStationClient.stop();
     WiFi.disconnect();
   }
-  else{
-    switch (mode){
-    case ENVIRONMENT: 
-      sendClimateData();
-      break;
-    case OBJECT:
-        sendObjectData();
-      break;
-    case CUP:
-        sendCupData();
-      break;
-    case ACTUATOR:
-      //code for acting as actuator goes here
-     break;
-    default:
-      display.clearDisplay();
-      display.setCursor(0,0);
-      display.println("Sensor mode error");
-      display.display();
-      delay(300);
-    }
+
+  switch (mode) {
+  case ENVIRONMENT:
+    sendClimateData();
+    break;
+  case OBJECT:
+    sendObjectData();
+    break;
+  case CUP:
+    sendCupData();
+    break;
+  case ACTUATOR:
+    break;
+  default:
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.println("Sensor mode error");
+    display.display();
+    delay(300);
   }
 }
 
-void sendClimateData()
-{
+void sendClimateData() {
   bme68xData data;
   uint8_t nFieldsLeft = 0;
-	delay(150);
+  delay(150);
 
-	if (bme.fetchData())
-	{
-		do
-		{
-			nFieldsLeft = bme.getData(data);
-			//if (data.status == NEW_GAS_MEAS)
-			//{
-				client.print(String(data.temperature-4.49) + ", " + String(data.humidity) + ", " + String(data.pressure) + '\n');
+  if (bme.fetchData()) {
+    do {
+      nFieldsLeft = bme.getData(data);
+      String climateData = String(data.temperature - 4.49) + ", " + String(data.humidity) + ", " + String(data.pressure);
 
-				if(data.gas_index == 2) /* Sequential mode sleeps after this measurement */
-					delay(250);
-			//}
-		} while (nFieldsLeft);
-	}
+      // Send data to base station (no changes needed here)
+      baseStationClient.print(climateData + '\n'); 
+
+      // Create the JSON payload for API
+      String jsonData = "{\"sensor_mode\": \"ENVIRONMENT\", \"data\": \"" + climateData + "\"}";
+
+      // Send POST request with JSON data to API
+      apiClient.print("POST /store_data HTTP/1.1\r\n");
+      apiClient.print("Host: " + String(API_SERVER_IP) + "\r\n");
+      apiClient.print("Content-Type: application/json\r\n");
+      apiClient.print("Content-Length: " + String(jsonData.length()) + "\r\n");
+      apiClient.print("\r\n" + jsonData + "\r\n");
+
+      if (data.gas_index == 2) delay(250);
+    } while (nFieldsLeft);
+  }
 }
 
-void sendObjectData(){
-  //write code here
+void sendObjectData() {
+  // Implement object data sending
 }
 
-void sendCupData(){
-  //write code here
+void sendCupData() {
+  // Implement cup data sending
 }
 
-void redButtonPressed(){
+void redButtonPressed() {
   changeMode();
 }
 
-void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use the black button
-  switch (mode){
-    case ENVIRONMENT: 
-      
-      break;
-    case OBJECT:
-        
-      break;
-    case CUP:
-        
-      break;
-    case ACTUATOR:
-      
-     break;
-    default:
-      display.clearDisplay();
-      display.setCursor(0,0);
-      display.println("Sensor mode error");
-      display.display();
-      delay(300);
-    }
+void blackButtonPressed() {
+  // Black button logic per mode
 }
 
-void changeMode(){
+void changeMode() {
   display.clearDisplay();
-  display.setCursor(0,0);
-  switch (mode){
-    case ENVIRONMENT: 
-      mode = OBJECT;
-      display.println("object mode");
-      break;
-    case OBJECT:
-      mode = CUP;
-      display.println("cup mode");
-      break;
-    case CUP:
-      mode = ACTUATOR;
-      display.println("actuator mode");
-      break;
-    case ACTUATOR:
-      mode = ENVIRONMENT;
-      display.println("environment mode");
-     break;
-    default:
-      display.println("mode error");
-    }
+  display.setCursor(0, 0);
+  switch (mode) {
+  case ENVIRONMENT:
+    mode = OBJECT;
+    display.println("object mode");
+    break;
+  case OBJECT:
+    mode = CUP;
+    display.println("cup mode");
+    break;
+  case CUP:
+    mode = ACTUATOR;
+    display.println("actuator mode");
+    break;
+  case ACTUATOR:
+    mode = ENVIRONMENT;
+    display.println("environment mode");
+    break;
+  default:
+    display.println("mode error");
+  }
   display.display();
   delay(300);
 }
-
