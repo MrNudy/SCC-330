@@ -1,7 +1,8 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <PDM.h>
 #include "bme68xLibrary.h"         //This library is not available in PlatformIO
-//Library added to lib folder on the left
+#include "BH1745NUC.h"          //light measurement sensor library
 #include "Wire.h"
 #include <Adafruit_GFX.h>       //OLED display support library
 #include <Adafruit_SSD1306.h>   //OLED display library
@@ -45,6 +46,14 @@ const char* password = "group6best"; //Access Point Password
 Bme68x bme;                         //declares climate sensor variable
 WiFiClient client;                  //declares WiFi client
 
+//----defines light light measurement sensor parameters
+#define BH1745NUC_DEVICE_ADDRESS_38 0x38    //light measurement sensor I2C address
+BH1745NUC bh1745nuc = BH1745NUC();
+
+//----defines microphone measurement sensor parameters
+short sampleBuffer[512];
+volatile int samplesRead;
+
 //declare functions implemented
 bool connectToBaseStation();
 void connectWiFi();
@@ -55,6 +64,7 @@ void sendZoneTriggeredData();           //For sending zone motion data to BaseSt
 void redButtonPressed();
 void blackButtonPressed();
 void changeMode();                  //On button press change sensor mode
+void onPDMdata();
 
 void setup() {
     Wire.begin();         //Initializes the Wire library and join the I2C bus as a controller
@@ -85,8 +95,6 @@ void setup() {
   // Operate in WiFi Station mode
   WiFi.mode(WIFI_STA);              //sets WiFi as station/client
   WiFi.setHostname("Group6Station");
- 
-  connectToBaseStation();
 
     if (bme.checkStatus())
     {
@@ -115,6 +123,22 @@ void setup() {
     bme.setHeaterProf(tempProf, durProf, 3);
     bme.setOpMode(BME68X_SEQUENTIAL_MODE);
 
+    //start light level measurements
+    bh1745nuc.begin(BH1745NUC_DEVICE_ADDRESS_38);
+    bh1745nuc.startMeasurement();
+
+    //start sound level measurements
+    // PDM.onReceive(onPDMdata);
+    // // PDM.setCLK();
+    // // PDM.setDIN();
+    // if(!PDM.begin(1, 16000)){
+    //   display.clearDisplay();
+    //   display.setCursor(0,0);
+    //   display.write("Failed to start PDM");
+    //   display.display();
+    //   while(1);
+    // }
+
     pinMode(REDButton, INPUT);
     pinMode(BLACKButton, INPUT);
     pinMode(MOTION_SENSOR, INPUT);
@@ -124,6 +148,7 @@ void setup() {
   
   attachInterrupt(REDButton, redButtonPressed, FALLING);
   attachInterrupt(BLACKButton, blackButtonPressed, FALLING);
+  connectToBaseStation();
 }
 
 void loop() {
@@ -173,7 +198,10 @@ void loop() {
 void sendClimateData()
 {
   while(!connectToBaseStation());
-  //write code here
+  bme68xData data;
+  bme.getData(data);
+  bh1745nuc.read();
+  client.printf("E:%d,%f,%d\n",bh1745nuc.clear,0,data.temperature);//0 Place holder until microphone issue can be debugged
 }
 
 void sendObjectData(){
@@ -245,6 +273,17 @@ void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use
 
 void redButtonPressed(){
   changeMode();
+}
+
+void onPDMdata() {
+  // Query the number of available bytes
+  int bytesAvailable = PDM.available();
+
+  // Read into the sample buffer
+  PDM.read(sampleBuffer, bytesAvailable);
+
+  // 16-bit, 2 bytes per sample
+  samplesRead = bytesAvailable / 2;
 }
 
 void changeMode() {
