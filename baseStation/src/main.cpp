@@ -1,94 +1,100 @@
 #include <Arduino.h>
-
 #include <WiFi.h>
+#include <HTTPClient.h> // Include HTTP client for sending data to API
 #include "Wire.h"
-
 #include "hardware/watchdog.h"
 
 void software_reset();
+void sendDataToAPI(const String& data, const String& sensor_mode); // Add sensor_mode as a parameter
 
 String status = "Connected";
 
-const char* ap_ssid = "Group6BaseStation";    //Access Point SSID
-const char* ap_password= "group6best"; //Access Point Password
+const char* ap_ssid = "Group6BaseStation";    // Access Point SSID
+const char* ap_password = "group6best";       // Access Point Password
+const char* api_url = "http://192.168.1.1:5000/store_data"; // Updated API URL
 
-uint8_t max_connections=5;//Maximum Connection Limit for AP
+uint8_t max_connections = 5; // Maximum Connection Limit for AP
+int current_stations = 0, new_stations = 0;
 
-int current_stations=0, new_stations=0;
-
-//Local
-IPAddress local_IP(192, 168, 1, 2);        // Set your desired static IP address
-IPAddress local_gateway(192, 168, 1, 1);   // Usually the same as the IP address
+// Local Network Configuration
+IPAddress local_IP(192, 168, 1, 2);
+IPAddress local_gateway(192, 168, 1, 1);
 IPAddress local_subnet(255, 255, 255, 0);
 int local_port = 80;
 
-//Hotspot
-IPAddress ap_IP(192, 168, 10, 2);  // Set your desired static IP address
-IPAddress ap_gateway(192, 168, 10, 1);   // Usually the same as the IP address
+// Hotspot Configuration
+IPAddress ap_IP(192, 168, 10, 2);
+IPAddress ap_gateway(192, 168, 10, 1);
 IPAddress ap_subnet(255, 255, 255, 0);
 int ap_port = 5263;
 
 IPAddress IP;
+WiFiServer server(5263); // Webserver instance on port 5263
 
-//Specifying the Webserver instance to connect with HTTP Port: 80
-WiFiServer server(5263);
- 
 void setup() {
-  //Start the serial communication channel
+  // Start serial communication
   Serial.begin(115200);
-  while (!Serial); // Wait until serial is available
-  sleep_ms(6);//added because this is the minimum time I found that gets all serial message to print(no idea why the line above doesn't fully work)
- 
+  while (!Serial);
+  sleep_ms(6);
+
   WiFi.mode(WIFI_AP);
   WiFi.setHostname("BaseStation");
-  WiFi.softAPConfig(ap_IP, ap_gateway, ap_subnet);  // Configure static IP
-   
-  //Setting the AP Mode with SSID, Password, and Max Connection Limit
-  if(WiFi.softAP(ap_ssid,ap_password,1,false,max_connections))
-  {
-    Serial.print("Access Point is Created with SSID: ");
+  WiFi.softAPConfig(ap_IP, ap_gateway, ap_subnet); // Configure static IP for AP mode
+
+  if (WiFi.softAP(ap_ssid, ap_password, 1, false, max_connections)) {
+    Serial.print("Access Point Created with SSID: ");
     Serial.println(ap_ssid);
     Serial.print("Max Connections Allowed: ");
     Serial.println(max_connections);
     Serial.print("Access Point IP: ");
     Serial.println(WiFi.softAPIP());
-  }
-  else
-  {
+  } else {
     Serial.println("Unable to Create Access Point");
   }
   
-  //Starting the Server
   server.begin();
-
-  Serial.println("Base Station Started");
-  Serial.println();
-  Serial.println();
+  Serial.println("Base Station Started\n");
 }
 
-void loop(){
- WiFiClient client = server.available();               // listen for incoming clients
-  if (client) {                                        // if you get a client....                              
+void loop() {
+  WiFiClient client = server.available(); // Listen for incoming clients
+  if (client) {
     Serial.println("Client Connected...");
-    while (client.connected()) {                       // loop while the client's connected
-      if (client.available()) 
-      {                                                // if there's bytes to read from the client,
-        Serial.println(client.readStringUntil('\n'));  // print it out the serial monitor
-        while(client.read()>0);                        // clear the wifi receive area cache
-      }
-      //if(Serial.available()){                          // if there's bytes to read from the serial monitor,
-      //  client.print(Serial.readStringUntil('\n'));    // print it out the client.
-      //  while(Serial.read()>0);                        // clear the wifi receive area cache
-      //}
-    }
-    client.stop();                                     // stop the client connecting.
+    String data = client.readStringUntil('\n'); // Read data from client
+    Serial.println(data); // Print to Serial Monitor
+    sendDataToAPI(data, "ENVIRONMENT"); // Example sensor mode
+    client.stop();
     Serial.println("Client Disconnected.");
   }
 }
 
-//can be used to reset data receiver if communication is lost
-void software_reset()
-{
-    watchdog_enable(1, 1);
-    while(1);
+// Function to send data to API
+void sendDataToAPI(const String& data, const String& sensor_mode) {
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    http.begin(api_url); // Specify API URL
+    http.addHeader("Content-Type", "application/json");
+
+    // Updated JSON payload structure
+    String jsonData = "{\"sensor_mode\": \"" + sensor_mode + "\", \"data\": \"" + data + "\"}";
+    
+    int httpResponseCode = http.POST(jsonData); // Send HTTP POST request
+
+    if (httpResponseCode > 0) {
+      Serial.print("Data sent to API, response code: ");
+      Serial.println(httpResponseCode);
+    } else {
+      Serial.print("Error sending data to API, error code: ");
+      Serial.println(httpResponseCode);
+    }
+
+    http.end();
+  } else {
+    Serial.println("WiFi not connected, unable to send data to API.");
+  }
+}
+
+void software_reset() {
+  watchdog_enable(1, 1);
+  while (1);
 }
