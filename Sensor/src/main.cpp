@@ -96,6 +96,9 @@ void setup() {
   WiFi.mode(WIFI_STA);              //sets WiFi as station/client
   WiFi.setHostname("Group6Station");
 
+  //initialize climate sensor with I2C address
+	  bme.begin(0x76, Wire);
+
     if (bme.checkStatus())
     {
         if (bme.checkStatus() == BME68X_ERROR)
@@ -199,9 +202,10 @@ void sendClimateData()
 {
   while(!connectToBaseStation());
   bme68xData data;
-  bme.getData(data);
+  bme.fetchData();
+  while(bme.getData(data));
   bh1745nuc.read();
-  client.printf("E:%d,%f,%d\n",bh1745nuc.clear,0,data.temperature);//0 Place holder until microphone issue can be debugged
+  client.printf("E:%d,%d,%f\n",bh1745nuc.clear,0,data.temperature-4.49);//0 Place holder until microphone issue can be debugged
 }
 
 void sendObjectData(){
