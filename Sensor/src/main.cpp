@@ -34,6 +34,15 @@ enum SENSOR_MODE {
 };
 SENSOR_MODE mode = ENVIRONMENT;
 
+enum OBSERVING_OBJECT {
+    CHAIR,
+    DOOR,
+    RUBBISH_BIN,//BIN is already a keyword
+    TABLE,
+    CUPBOARD
+};
+OBSERVING_OBJECT object = DOOR;
+
 int pirState = LOW;             // keeps track of PIR state, LOW (0) when no motion is detected and HIGH (1) when
 // motion is detected. Initialised to no motion detected
 int motionValue = 0;                  // variable to store the sensor value
@@ -51,10 +60,12 @@ void connectWiFi();
 void sendClimateData();             //For sending enrironment data to BaseStation
 void sendObjectData();              //For sending object usage data to BaseStation
 void sendCupData();                 //For sending water usage data to BaseStation
-void sendZoneTriggeredData();           //For sending zone motion data to BaseStation
+void sendZoneTriggeredData();       //For sending zone motion data to BaseStation
 void redButtonPressed();
 void blackButtonPressed();
 void changeMode();                  //On button press change sensor mode
+void changeZone();                  //for use in Tripwire mode
+void changeObject();                //for use in Object mode
 
 void setup() {
     Wire.begin();         //Initializes the Wire library and join the I2C bus as a controller
@@ -87,7 +98,6 @@ void setup() {
   WiFi.setHostname("Group6Station");
  
   connectToBaseStation();
-
     if (bme.checkStatus())
     {
         if (bme.checkStatus() == BME68X_ERROR)
@@ -119,11 +129,11 @@ void setup() {
     pinMode(BLACKButton, INPUT);
     pinMode(MOTION_SENSOR, INPUT);
 
-  pinMode(REDButton, INPUT);            //Set buttons as inputs
-  pinMode(BLACKButton, INPUT);
-  
-  attachInterrupt(REDButton, redButtonPressed, FALLING);
-  attachInterrupt(BLACKButton, blackButtonPressed, FALLING);
+    pinMode(REDButton, INPUT);            //Set buttons as inputs
+    pinMode(BLACKButton, INPUT);
+    
+    attachInterrupt(REDButton, redButtonPressed, FALLING);
+    attachInterrupt(BLACKButton, blackButtonPressed, FALLING);
 }
 
 void loop() {
@@ -148,16 +158,16 @@ void loop() {
     sendClimateData();
     break;
   case OBJECT:
-      sendObjectData();
+    sendObjectData();
     break;
   case CUP:
-      sendCupData();
+    sendCupData();
     break;
   case ACTUATOR:
     //code for acting as actuator goes here
   break;
   case TRIPWIRE:
-      sendZoneTriggeredData();
+    sendZoneTriggeredData();
     break;
   default:
     display.clearDisplay();
@@ -166,8 +176,6 @@ void loop() {
     display.display();
     delay(300);
   }
-  
-  
 }
 
 void sendClimateData()
@@ -177,8 +185,27 @@ void sendClimateData()
 }
 
 void sendObjectData(){
-  while(!connectToBaseStation());
-  //write code here
+  motionValue = digitalRead(MOTION_SENSOR);
+  if (motionValue == HIGH) {
+    if (pirState == LOW) {
+      pirState = HIGH;
+      while(!connectToBaseStation());
+      display.clearDisplay();
+      display.setCursor(0,0);
+      client.print("O:"+(String)object+"\n");
+      display.println("Motion detected");
+      display.display();
+    }
+  }
+  else {
+    if (pirState == HIGH) {
+      pirState = LOW;
+      display.clearDisplay();
+      display.setCursor(0,0);
+      display.println("No Motion detected");
+      display.display();
+    }
+  }
 }
 
 void sendCupData(){
@@ -187,29 +214,28 @@ void sendCupData(){
 }
 
 void sendZoneTriggeredData() {
-    motionValue = digitalRead(MOTION_SENSOR);
-    if (motionValue == HIGH) {
-        while(!connectToBaseStation());
-        client.print("T:" + String(zone) + "\n");
-        if (pirState == LOW) {
-            pirState = HIGH;
-        }
+  motionValue = digitalRead(MOTION_SENSOR);
+  if (motionValue == HIGH) {
+    if (pirState == LOW) {
+      pirState = HIGH;
+      while(!connectToBaseStation());
+      client.print("T:" + String(zone) + "\n");
     }
-    else {
-        if (pirState == HIGH) {
-            pirState = LOW;
-        }
+  }
+  else {
+    if (pirState == HIGH) {
+      pirState = LOW;
     }
+  }
 }
 
 void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use the black button
   switch (mode){
     case ENVIRONMENT: 
-      display.println(WiFi.status());
-      display.display();
+
       break;
     case OBJECT:
-        
+        changeObject();
       break;
     case CUP:
         
@@ -218,21 +244,7 @@ void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use
       
      break;
     case TRIPWIRE:
-        zone++;
-        if (zone == 3) {
-            display.println("Zone changed, new zone: 3");
-            Serial.println("Zone changed, new zone: 3");
-        }
-        else if (zone == 2) {
-            display.println("Zone changed, new zone: 2");
-            Serial.println("Zone changed, new zone: 2");
-        }
-        else {
-            zone = 1;
-            display.println("Zone changed, new zone: 1");
-            Serial.println("Zone changed, new zone: 1");
-        }
-        display.display();
+        changeZone();
       break;
     default:
       display.clearDisplay();
@@ -278,11 +290,64 @@ void changeMode() {
   delay(300);
 }
 
+void changeObject(){
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  switch(object){
+    case CHAIR:
+      object = DOOR;
+      display.println("Observing Door");
+      break;
+    case DOOR:
+      object = RUBBISH_BIN;
+      display.println("Observing Bin");
+      break;
+    case RUBBISH_BIN:
+      object = TABLE;
+      display.println("Observing Table");
+      break;
+    case TABLE:
+      object = CUPBOARD;
+      display.println("Observing Cupboard");
+      break;
+    case CUPBOARD:
+      object = CHAIR;
+      display.println("Observing Chair");
+      break;
+    default:
+      display.println("object error");
+  }
+  display.display();
+}
+
+void changeZone(){
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  switch(zone){
+    case 1:
+      zone = 2;
+      display.println("Zone 2");
+      break;
+    case 2:
+      zone = 3;
+      display.println("Zone 3");
+      break;
+    case 3:
+      zone = 1;
+      display.println("Zone 1");
+      break;
+    default:
+      display.println("zone error");
+  }
+  display.display();
+}
+
 bool connectToBaseStation(){
-  connectWiFi();
   while (!client.connect(REMOTE_IP, REMOTE_PORT)) {
     display.clearDisplay();                 //clears OLED screen
     display.setCursor(0,0);
+    display.print("\nWaiting for BaseStation");
+    display.display();
     if(WiFi.status() != WL_CONNECTED){
       connectWiFi();
     }
@@ -292,7 +357,6 @@ bool connectToBaseStation(){
 
 void connectWiFi(){
   WiFi.begin(ssid, password);       //starts WiFi with access authorisation details
-  Serial.print("\nWaiting for WiFi... ");
   while (WiFi.status() != WL_CONNECTED){ //awaits connection to remote server
     display.clearDisplay();                 //clears OLED screen
     display.setCursor(0,0);
