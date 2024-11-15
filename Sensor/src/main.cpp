@@ -65,6 +65,7 @@ void redButtonPressed();
 void blackButtonPressed();
 void changeMode();                  //On button press change sensor mode
 void onPDMdata();
+float readSoundSamples();
 
 void setup() {
     Wire.begin();         //Initializes the Wire library and join the I2C bus as a controller
@@ -131,16 +132,16 @@ void setup() {
     bh1745nuc.startMeasurement();
 
     //start sound level measurements
-    // PDM.onReceive(onPDMdata);
-    // // PDM.setCLK();
-    // // PDM.setDIN();
-    // if(!PDM.begin(1, 16000)){
-    //   display.clearDisplay();
-    //   display.setCursor(0,0);
-    //   display.write("Failed to start PDM");
-    //   display.display();
-    //   while(1);
-    // }
+    PDM.onReceive(onPDMdata);
+    PDM.setCLK(3);
+    PDM.setDIN(2);
+    if(!PDM.begin(1, 16000)){
+      display.clearDisplay();
+      display.setCursor(0,0);
+      display.write("Failed to start PDM");
+      display.display();
+      while(1);
+    }
 
     pinMode(REDButton, INPUT);
     pinMode(BLACKButton, INPUT);
@@ -200,12 +201,12 @@ void loop() {
 
 void sendClimateData()
 {
-  while(!connectToBaseStation());
   bme68xData data;
   bme.fetchData();
   while(bme.getData(data));
   bh1745nuc.read();
-  client.printf("E:%d,%d,%f\n",bh1745nuc.clear,0,data.temperature-4.49);//0 Place holder until microphone issue can be debugged
+  while(!connectToBaseStation());
+  client.printf("E:%d,%d,%f,%f\n",zone,bh1745nuc.clear,readSoundSamples(),data.temperature-4.49);
 }
 
 void sendObjectData(){
@@ -236,10 +237,6 @@ void sendZoneTriggeredData() {
 
 void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use the black button
   switch (mode){
-    case ENVIRONMENT: 
-      display.println(WiFi.status());
-      display.display();
-      break;
     case OBJECT:
         
       break;
@@ -250,7 +247,10 @@ void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use
       
      break;
     case TRIPWIRE:
+    case ENVIRONMENT:
         zone++;
+        display.clearDisplay();
+        display.setCursor(0,0);
         if (zone == 3) {
             display.println("Zone changed, new zone: 3");
             Serial.println("Zone changed, new zone: 3");
@@ -288,6 +288,26 @@ void onPDMdata() {
 
   // 16-bit, 2 bytes per sample
   samplesRead = bytesAvailable / 2;
+}
+
+float calculateDecibels() {
+  float sum = 0;
+  for (int i = 0; i < samplesRead; i++) {
+    sum += abs(sampleBuffer[i]);
+  }
+  float average = sum / samplesRead;
+  return -20.0f * log10(average / 32767.0f); // Convert average value to decibels
+}
+
+// Function to read sound samples and calculate decibel level
+float readSoundSamples() {
+  if (samplesRead > 0) {
+    // Calculate and return the decibel level
+    float decibels = calculateDecibels();
+    samplesRead = 0; // Reset the sample count after processing
+    return decibels;
+  }
+  return -1; // Return -1 if no samples are available
 }
 
 void changeMode() {
