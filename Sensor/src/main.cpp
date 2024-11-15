@@ -6,6 +6,9 @@
 #include "Wire.h"
 #include <Adafruit_GFX.h>       //OLED display support library
 #include <Adafruit_SSD1306.h>   //OLED display library
+#include <SD.h>  // File system library
+#include <SPI.h>  // File system for the Pico
+#include "SDCard.h" // SD card class
 
 //-- defines OLED screen dimensions ---
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -15,6 +18,10 @@
 
 //creates OLED display object "display"
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+
+SDCard sdCard;
+bool readFromFile = false;
 
 #define REDButton 12     //connected to pin GP12
 #define BLACKButton 13   //connected to pin GP13
@@ -83,6 +90,8 @@ void setup() {
     //or a peripheral. It is normally be called only once.
     Serial.begin(115200); //Sets the data rate in bits per second (baud) for serial data transmission. 
     //For communicating with Serial Monitor, make sure to use one of the baud ...
+
+    sdCard.setup();
 
 // initializes OLED display 
     if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS))
@@ -206,14 +215,53 @@ void loop() {
   }
 }
 
+void displayData(String dataLine){
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.println(dataLine);
+  display.display();
+}
+
 void sendClimateData()
 {
   bme68xData data;
   bme.fetchData();
   while(bme.getData(data));
   bh1745nuc.read();
+  float sound = readSoundSamples();
   while(!connectToBaseStation());
-  client.printf("E:%d,%d,%f,%f\n",zone,bh1745nuc.clear,readSoundSamples(),data.temperature-4.49);
+  client.printf("E:%d,%d,%f,%f\n",zone,bh1745nuc.clear,sound,data.temperature-4.49);
+  String dataLine = String(zone) + ", " + bh1745nuc.clear + ", " + sound + ", " + String(data.temperature-4.49); // later date remove spaces for parsing
+
+  sdCard.writeData(dataLine);
+
+  if (readFromFile == true) {
+        String* fileData = sdCard.getData();
+        for(int i = 0; i < 287; i++){  //DATA_SIZE from SDCard.h
+          if (fileData[i] != ""){
+            if (readFromFile == false){
+              break;
+            } else {
+              display.clearDisplay();
+              display.setCursor(0,0);
+              display.println("getting " + String(i));
+              delay(1000);
+              display.print(fileData[i]);
+              display.display();
+            }
+          }else{
+              break;
+            };
+        }
+      } else {
+          display.clearDisplay();
+          display.setCursor(0,0);
+          display.println("Live");
+          delay(1000);
+          display.print(dataLine);
+          display.display();
+      }
+      
 }
 
 void sendObjectData(){
@@ -261,7 +309,12 @@ void sendZoneTriggeredData() {
   }
 }
 
-void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use the black button
+void blackButtonPressed(){//Anyone who wants an input for thier sensor mode use the black button
+    if (readFromFile == true) {
+      readFromFile = false;
+    } else {
+        readFromFile = true;
+    }
   switch (mode){
     case OBJECT:
         changeObject();
