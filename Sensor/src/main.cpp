@@ -1,7 +1,8 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <PDM.h>
 #include "bme68xLibrary.h"         //This library is not available in PlatformIO
-//Library added to lib folder on the left
+#include "BH1745NUC.h"          //light measurement sensor library
 #include "Wire.h"
 #include <Adafruit_GFX.h>       //OLED display support library
 #include <Adafruit_SSD1306.h>   //OLED display library
@@ -54,6 +55,14 @@ const char* password = "group6best"; //Access Point Password
 Bme68x bme;                         //declares climate sensor variable
 WiFiClient client;                  //declares WiFi client
 
+//----defines light light measurement sensor parameters
+#define BH1745NUC_DEVICE_ADDRESS_38 0x38    //light measurement sensor I2C address
+BH1745NUC bh1745nuc = BH1745NUC();
+
+//----defines microphone measurement sensor parameters
+short sampleBuffer[512];
+volatile int samplesRead;
+
 //declare functions implemented
 bool connectToBaseStation();
 void connectWiFi();
@@ -64,6 +73,8 @@ void sendZoneTriggeredData();       //For sending zone motion data to BaseStatio
 void redButtonPressed();
 void blackButtonPressed();
 void changeMode();                  //On button press change sensor mode
+void onPDMdata();
+float readSoundSamples();
 void changeZone();                  //for use in Tripwire mode
 void changeObject();                //for use in Object mode
 
@@ -96,6 +107,10 @@ void setup() {
   // Operate in WiFi Station mode
   WiFi.mode(WIFI_STA);              //sets WiFi as station/client
   WiFi.setHostname("Group6Station");
+
+  //initialize climate sensor with I2C address
+	  bme.begin(0x76, Wire);
+
  
   connectToBaseStation();
     if (bme.checkStatus())
@@ -125,13 +140,26 @@ void setup() {
     bme.setHeaterProf(tempProf, durProf, 3);
     bme.setOpMode(BME68X_SEQUENTIAL_MODE);
 
+    //start light level measurements
+    bh1745nuc.begin(BH1745NUC_DEVICE_ADDRESS_38);
+    bh1745nuc.startMeasurement();
+
+    //start sound level measurements
+    PDM.onReceive(onPDMdata);
+    PDM.setCLK(3);
+    PDM.setDIN(2);
+    if(!PDM.begin(1, 16000)){
+      display.clearDisplay();
+      display.setCursor(0,0);
+      display.write("Failed to start PDM");
+      display.display();
+      while(1);
+    }
+
     pinMode(REDButton, INPUT);
     pinMode(BLACKButton, INPUT);
     pinMode(MOTION_SENSOR, INPUT);
 
-    pinMode(REDButton, INPUT);            //Set buttons as inputs
-    pinMode(BLACKButton, INPUT);
-    
     attachInterrupt(REDButton, redButtonPressed, FALLING);
     attachInterrupt(BLACKButton, blackButtonPressed, FALLING);
 }
@@ -180,8 +208,12 @@ void loop() {
 
 void sendClimateData()
 {
+  bme68xData data;
+  bme.fetchData();
+  while(bme.getData(data));
+  bh1745nuc.read();
   while(!connectToBaseStation());
-  //write code here
+  client.printf("E:%d,%d,%f,%f\n",zone,bh1745nuc.clear,readSoundSamples(),data.temperature-4.49);
 }
 
 void sendObjectData(){
@@ -231,9 +263,6 @@ void sendZoneTriggeredData() {
 
 void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use the black button
   switch (mode){
-    case ENVIRONMENT: 
-
-      break;
     case OBJECT:
         changeObject();
       break;
@@ -244,6 +273,7 @@ void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use
       
      break;
     case TRIPWIRE:
+    case ENVIRONMENT:
         changeZone();
       break;
     default:
@@ -257,6 +287,37 @@ void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use
 
 void redButtonPressed(){
   changeMode();
+}
+
+void onPDMdata() {
+  // Query the number of available bytes
+  int bytesAvailable = PDM.available();
+
+  // Read into the sample buffer
+  PDM.read(sampleBuffer, bytesAvailable);
+
+  // 16-bit, 2 bytes per sample
+  samplesRead = bytesAvailable / 2;
+}
+
+float calculateDecibels() {
+  float sum = 0;
+  for (int i = 0; i < samplesRead; i++) {
+    sum += abs(sampleBuffer[i]);
+  }
+  float average = sum / samplesRead;
+  return -20.0f * log10(average / 32767.0f); // Convert average value to decibels
+}
+
+// Function to read sound samples and calculate decibel level
+float readSoundSamples() {
+  if (samplesRead > 0) {
+    // Calculate and return the decibel level
+    float decibels = calculateDecibels();
+    samplesRead = 0; // Reset the sample count after processing
+    return decibels;
+  }
+  return -1; // Return -1 if no samples are available
 }
 
 void changeMode() {
