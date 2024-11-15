@@ -20,6 +20,7 @@
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 SDCard sdCard;
+bool readFromFile = false;
 
 #define REDButton 12     //connected to pin GP12
 #define BLACKButton 13   //connected to pin GP13
@@ -249,18 +250,31 @@ void sendClimateData() {
       //display.println("Please help me");
       //display.display();
 
-      String* fileData = sdCard.getData();
-      for(int i = 0; i < 287; i++){  //DATA_SIZE from SDCard.h
-        if (fileData[i] != ""){
+      if (readFromFile == true) {
+        String* fileData = sdCard.getData();
+        for(int i = 0; i < 287; i++){  //DATA_SIZE from SDCard.h
+          if (fileData[i] != ""){
+            if (readFromFile == false){
+              break;
+            } else {
+              display.clearDisplay();
+              display.setCursor(0,0);
+              display.println("getting " + String(i));
+              delay(1000);
+              display.print(fileData[i]);
+              display.display();
+            }
+          }else{
+              break;
+            };
+        }
+      } else {
           display.clearDisplay();
           display.setCursor(0,0);
-          display.println("getting " + String(i));
+          display.println("Live");
           delay(1000);
-          display.print(fileData[i]);
+          display.print(dataLine);
           display.display();
-        } else{
-          break;
-        }
       }
 
       
@@ -313,10 +327,13 @@ void redButtonPressed(){
 }
 
 void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use the black button
+    if (readFromFile == true) {
+      readFromFile = false;
+    } else {
+        readFromFile = true;
+    }
   switch (mode){
     case ENVIRONMENT: 
-      
-      break;
     case OBJECT:
         
       break;
@@ -338,6 +355,11 @@ void blackButtonPressed(){ //Anyone who wants an input for thier sensor mode use
 void changeMode(){
   display.clearDisplay();
   display.setCursor(0,0);
+  if (readFromFile == true) {
+    readFromFile = false;
+    }else {
+    readFromFile = true;
+    }
   switch (mode){
     case ENVIRONMENT: 
       mode = OBJECT;
