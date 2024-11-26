@@ -1,0 +1,18 @@
+Interface for DB send as string in the format
+replace <> with data
+
+Environmental data:
+"E:<Light>,<Sound>,<Temp>\n"
+
+Object:
+"O:'<object>'\n"
+
+tripwire:
+"T:<zone>\n"
+
+Cup:
+"C:<ml used>\n"
+{Note: - for when refilled}
+
+Actuator:
+"A:<Level>\n"

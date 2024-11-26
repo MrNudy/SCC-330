@@ -9,6 +9,14 @@ void software_reset();
 
 String status = "Connected";
 
+enum OBSERVING_OBJECT {
+    CHAIR,
+    DOOR,
+    RUBBISH_BIN,//BIN is already a keyword
+    TABLE,
+    CUPBOARD
+};
+
 const char* ap_ssid = "Group6BaseStation";    //Access Point SSID
 const char* ap_password= "group6best"; //Access Point Password
 
@@ -70,17 +78,7 @@ void loop(){
  WiFiClient client = server.available();               // listen for incoming clients
   if (client) {                                        // if you get a client....                              
     Serial.println("Client Connected...");
-    while (client.connected()) {                       // loop while the client's connected
-      if (client.available()) 
-      {                                                // if there's bytes to read from the client,
-        Serial.println(client.readStringUntil('\n'));  // print it out the serial monitor
-        while(client.read()>0);                        // clear the wifi receive area cache
-      }
-      //if(Serial.available()){                          // if there's bytes to read from the serial monitor,
-      //  client.print(Serial.readStringUntil('\n'));    // print it out the client.
-      //  while(Serial.read()>0);                        // clear the wifi receive area cache
-      //}
-    }
+    Serial.println(client.readStringUntil('\n'));      // print it out the serial monitor
     client.stop();                                     // stop the client connecting.
     Serial.println("Client Disconnected.");
   }
