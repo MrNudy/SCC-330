@@ -31,6 +31,8 @@ bool readFromFile = false;
 
 #define MOTION_SENSOR 11 //connected to pin GP11
 
+#define BUZZER 7        //connected to pin GP7
+
 #define     REMOTE_IP          "192.168.10.1"  //remote server IP which that you want to connect to
 #define     REMOTE_PORT         5263           //connection port provided on remote server 
 
@@ -88,7 +90,8 @@ double calculateLiquidLeftCup(double angle);
 float cupRadius = 5; // can be changed for different cup sizes
 float cupHeight = 12.7; // can be changed for different cup sizes
 double cupCapacity = M_PI * pow(cupRadius, 2) * cupHeight;
-float currentCupContents = cupCapacity; // assume cup starts full;
+double cupContents = cupCapacity; // assume cup starts full;
+int soundIterator = 0;
 
 float gyroRateX = 0.0;
 float gyroRateY = 0.0;
@@ -200,6 +203,7 @@ void setup() {
     pinMode(REDButton, INPUT);
     pinMode(BLACKButton, INPUT);
     pinMode(MOTION_SENSOR, INPUT);
+    pinMode(BUZZER, OUTPUT);
 
     attachInterrupt(REDButton, redButtonPressed, FALLING);
     attachInterrupt(BLACKButton, blackButtonPressed, FALLING);
@@ -366,21 +370,37 @@ void sendObjectData(){
 // Cup stuff...
 void sendCupData(){
   while(!connectToBaseStation());
-  //write code here
+  computeTiltAndGyro();
+}
 
-  computeTiltAndGyro(); 
+double calcluateLiquidLeftCup(double angle) {
+  double maxFrequency = 8800; // starting frequency
+  double currentMaxContents = cupCapacity * sin(angle * M_PI / 180);
+  if(currentMaxContents > cupCapacity) {
+    cupContents = 0;
   }
-
-
-double calculateLiquidLeftCup(double angle) {
-  double newCurrentCupContents = M_PI * pow(cupRadius, 2) * cupHeight * sin(angle * M_PI / 180.0);
-  if(newCurrentCupContents < currentCupContents) {
-    currentCupContents = newCurrentCupContents;
+  if(abs(currentMaxContents) < cupContents) {
+    cupContents = abs(currentMaxContents);
+    double frequencyToPlay = maxFrequency - 6600 * cupContents/cupCapacity;
+    tone(BUZZER, frequencyToPlay);
+    delay(50);
+    tone(BUZZER, frequencyToPlay * 4/3);
+    delay(50);
+    noTone(BUZZER);
+    return cupCapacity - cupContents;
   }
   
-  if(currentCupContents < 0)
-    return cupCapacity;
-  return cupCapacity - currentCupContents;
+  if(soundIterator % 4 == 0) {
+    double frequencyToPlay = maxFrequency - 6600 * cupContents/cupCapacity;
+    tone(BUZZER, frequencyToPlay);
+    delay(50);
+    tone(BUZZER, frequencyToPlay * 4/3);
+    delay(50);
+    noTone(BUZZER);
+    soundIterator = 0;
+  }
+  soundIterator++;
+  return cupCapacity - cupContents;
 }
 
 void computeTiltAndGyro()
@@ -396,7 +416,7 @@ void computeTiltAndGyro()
 
   gyroRate = sqrt(sq(gyroRateX)+sq(gyroRateX)+sq(gyroRateX));
 
-  float accelAngle = getAccAngleX()*RAD_TO_DEG + 180.0;
+  double accelAngle = getAccAngleX()*RAD_TO_DEG + 180.0;
   String angleStr = String(round(accelAngle), 1);
 
   //display tilt and gyro values values on OLED display
@@ -410,16 +430,18 @@ void computeTiltAndGyro()
   display.println(F(""));
 
 
-  double liquidUsed = calculateLiquidLeftCup(accelAngle);
-  display.println(F("ml used: "));
+  double liquidUsed = calcluateLiquidLeftCup(accelAngle);
+  display.print(F("ml used: "));
   
-  display.print(String(liquidUsed));
+  display.print(String(static_cast<int>(round(liquidUsed))));
 
-  client.print("O:"+(String)liquidUsed+"\n");
+  display.print("\n\n\nReset: BLACK");
+
+  client.print("O:"+(String)cupContents+"\n");
 
   display.display();      //this function must be called for the OLED to display values
 
-  delay(300);
+  delay(150);
 }
 
 float getAccAngleX()
@@ -427,7 +449,6 @@ float getAccAngleX()
     float ang = atan2(accelData.yData,accelData.zData);
     return ang;
 }
-
 
 //returns accelerometer and gyroscope data
 void readIMU()
@@ -437,6 +458,14 @@ void readIMU()
     myLSM.getAccel(&accelData);
     myLSM.getGyro(&gyroData);
   }
+}
+
+void resetVolume() {
+  cupContents = cupCapacity;
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.println("Re-calibrating...");
+  display.display();
 }
 
 //calibrates gyro
@@ -492,7 +521,7 @@ void blackButtonPressed(){//Anyone who wants an input for thier sensor mode use 
         changeObject();
       break;
     case CUP:
-        calibrateGyro();
+        resetVolume();
       break;
     case ACTUATOR:
       

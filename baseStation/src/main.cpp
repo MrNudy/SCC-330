@@ -44,7 +44,7 @@ WiFiServer server(5263);
 void setup() {
   //Start the serial communication channel
   Serial.begin(115200);
-  while (!Serial); // Wait until serial is available
+  // while (!Serial); // Wait until serial is available
   sleep_ms(6);//added because this is the minimum time I found that gets all serial message to print(no idea why the line above doesn't fully work)
  
   WiFi.mode(WIFI_AP);
