@@ -9,6 +9,8 @@
 #include <SD.h>  // File system library
 #include <SPI.h>  // File system for the Pico
 #include "SDCard.h" // SD card class
+#include <Adafruit NeoPixel.h>  
+#include <string>
 
 //-- defines OLED screen dimensions ---
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -19,6 +21,13 @@
 //creates OLED display object "display"
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+#define PIN_WS2812B 6       //pin number that connects to the LEDs
+#define NUM_PIXELS 3         
+#define DELAY_INTERVAL 500   //should play around to find desired value
+
+Adafruit_NeoPixel WS2812B(NUM_PIXELS, PIN_WS2812B, NEO_GRB + NEO_KHZ800);
+int LEDPattern = 1;
+string command = "";
 
 SDCard sdCard;
 bool readFromFile = false;
@@ -84,6 +93,10 @@ void onPDMdata();
 float readSoundSamples();
 void changeZone();                  //for use in Tripwire mode
 void changeObject();                //for use in Object mode
+void turnLEDon();
+void turnLEDoff();
+void actuatorMode();
+void changeLEDPattern();
 
 void setup() {
     Wire.begin();         //Initializes the Wire library and join the I2C bus as a controller
@@ -174,6 +187,7 @@ void setup() {
 }
 
 void loop() {
+  WS2812B.clear();
   display.clearDisplay();                 //clears OLED screen
   display.setCursor(0,0);
   if (client.available() > 0) 
@@ -201,7 +215,7 @@ void loop() {
     sendCupData();
     break;
   case ACTUATOR:
-    //code for acting as actuator goes here
+    actuatorMode();
   break;
   case TRIPWIRE:
     sendZoneTriggeredData();
@@ -213,6 +227,60 @@ void loop() {
     display.display();
     delay(300);
   }
+}
+
+void actuatorMode(){
+  while(!connectToBaseStation());
+  if(command.empty() || client.read().size() > 0){ //would the read call through an error when nothing has been sent??
+                                                   //would the read call remove a character from the string if something has been??
+    command = client.readStringUntil('\n');//getting signal from basestation
+  }
+  if(command.equals()){ ///NEED TO DECIDE ON FORMAT AND PROGRAM SENDING THE SIGNAL INTO BASESTATION
+    turnLEDon();
+  }else{
+    display.clearDisplay();
+    display.setCursor(0,0);
+    display.println("Signal error");
+    display.display();
+  }
+}
+
+void turnLEDon(){
+  if(LEDPattern == 1){
+  //Solid all three 'blue off white' 
+    for(int i = 0; i < NUM_PIXELS; i ++){
+      WS2812B.setPixelColor(i, WS2812B.Color(80 ,200, 140));
+    }
+    WS2812B.show();
+  }else if (LEDPattern == 2)
+  {
+    //one by one 'blue off white' then one by one off
+    for(int i = 0; i < NUM_PIXELS; i ++){
+      WS2812B.setPixelColor(i, WS2812B.Color(80 ,200, 140));
+      delay(1500);
+      WS2812B.show();
+    }
+    delay(1000)
+    for(int i = 0; i < NUM_PIXELS; i ++){
+      WS2812B.setPixelColor(i, WS2812B.Color(0 ,0, 0));
+      delay(1500);
+      WS2812B.show();
+    }
+  }else if (LEDPattern == 3)
+  {
+    //Flash then off
+    for(int i = 0; i < NUM_PIXELS; i ++){
+      WS2812B.setPixelColor(i, WS2812B.Color(80 ,200, 140));
+    }
+    WS2812B.show();
+    delay(DELAY_INTERVAL);
+    WS2812B.clear();
+  }
+}
+
+//may become redundant...
+void turnLEDoff(){
+  WS2812B.clear();
 }
 
 void displayData(String dataLine){
@@ -323,7 +391,7 @@ void blackButtonPressed(){//Anyone who wants an input for thier sensor mode use 
         
       break;
     case ACTUATOR:
-      
+      changeLEDPattern();
      break;
     case TRIPWIRE:
     case ENVIRONMENT:
@@ -390,6 +458,8 @@ void changeMode() {
     display.println("actuator mode");
     break;
   case ACTUATOR:
+    turnLEDoff();
+    command = "";
     mode = TRIPWIRE;
     display.println("tripwire mode");
     break;
@@ -452,6 +522,29 @@ void changeZone(){
       break;
     default:
       display.println("zone error");
+  }
+  display.display();
+}
+
+void changeLEDPattern(){
+  WS2812B.clear();
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  switch(LEDPattern){
+    case 1:
+      LEDPattern = 2;
+      display.println("Pattern 2");
+      break;
+    case 2:
+      LEDPattern = 3;
+      display.println("Pattern 3");
+      break;
+    case 3:
+      LEDPattern = 1;
+      display.println("Pattern 1");
+      break;
+    default:
+      display.println("Pattern error");
   }
   display.display();
 }
