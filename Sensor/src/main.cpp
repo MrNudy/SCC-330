@@ -381,7 +381,7 @@ double calcluateLiquidLeftCup(double angle) {
   }
   if(abs(currentMaxContents) < cupContents) {
     cupContents = abs(currentMaxContents);
-    double frequencyToPlay = maxFrequency - 6600 * cupContents/cupCapacity;
+    double frequencyToPlay = maxFrequency - 6600 * (cupCapacity-cupContents)/cupCapacity;
     tone(BUZZER, frequencyToPlay);
     delay(50);
     tone(BUZZER, frequencyToPlay * 4/3);
@@ -391,7 +391,7 @@ double calcluateLiquidLeftCup(double angle) {
   }
   
   if(soundIterator % 4 == 0) {
-    double frequencyToPlay = maxFrequency - 6600 * cupContents/cupCapacity;
+    double frequencyToPlay = maxFrequency - 6600 * (cupCapacity-cupContents)/cupCapacity;
     tone(BUZZER, frequencyToPlay);
     delay(50);
     tone(BUZZER, frequencyToPlay * 4/3);
@@ -437,7 +437,7 @@ void computeTiltAndGyro()
 
   display.print("\n\n\nReset: BLACK");
 
-  client.print("O:"+(String)cupContents+"\n");
+  client.print("C:"+(String)cupContents+"\n");
 
   display.display();      //this function must be called for the OLED to display values
 
