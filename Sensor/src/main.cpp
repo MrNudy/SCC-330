@@ -187,7 +187,7 @@ void setup() {
 }
 
 void loop() {
-  WS2812B.clear();
+  turnLEDoff();
   display.clearDisplay();                 //clears OLED screen
   display.setCursor(0,0);
   if (client.available() > 0) 
@@ -231,11 +231,11 @@ void loop() {
 
 void actuatorMode(){
   while(!connectToBaseStation());
-  if(command.empty() || client.read().size() > 0){ //would the read call through an error when nothing has been sent??
-                                                   //would the read call remove a character from the string if something has been??
+  //if no command stored or new command incoming, try and read new command
+  if(command.empty() || client.read().size() > 0){ //would the read call remove a character from the string if something has been??
     command = client.readStringUntil('\n');//getting signal from basestation
   }
-  if(command.equals()){ ///NEED TO DECIDE ON FORMAT AND PROGRAM SENDING THE SIGNAL INTO BASESTATION
+  if(command.equals("LED: On")){ ///NEED TO DECIDE ON FORMAT AND PROGRAM SENDING THE SIGNAL INTO BASESTATION
     turnLEDon();
   }else{
     display.clearDisplay();
@@ -247,7 +247,7 @@ void actuatorMode(){
 
 void turnLEDon(){
   if(LEDPattern == 1){
-  //Solid all three 'blue off white' 
+  //Solid all three 'blue off-white' 
     for(int i = 0; i < NUM_PIXELS; i ++){
       WS2812B.setPixelColor(i, WS2812B.Color(80 ,200, 140));
     }
@@ -257,13 +257,13 @@ void turnLEDon(){
     //one by one 'blue off white' then one by one off
     for(int i = 0; i < NUM_PIXELS; i ++){
       WS2812B.setPixelColor(i, WS2812B.Color(80 ,200, 140));
-      delay(1500);
+      delay(DELAY_INTERVAL * 3);
       WS2812B.show();
     }
     delay(1000)
     for(int i = 0; i < NUM_PIXELS; i ++){
       WS2812B.setPixelColor(i, WS2812B.Color(0 ,0, 0));
-      delay(1500);
+      delay(DELAY_INTERVAL * 3);
       WS2812B.show();
     }
   }else if (LEDPattern == 3)
@@ -527,7 +527,7 @@ void changeZone(){
 }
 
 void changeLEDPattern(){
-  WS2812B.clear();
+  turnLEDoff();
   display.clearDisplay();
   display.setCursor(0, 0);
   switch(LEDPattern){

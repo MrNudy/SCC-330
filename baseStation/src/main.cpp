@@ -6,6 +6,7 @@
 #include "hardware/watchdog.h"
 
 void software_reset();
+void sendLEDSignal();
 
 String status = "Connected";
 
@@ -16,6 +17,8 @@ enum OBSERVING_OBJECT {
     TABLE,
     CUPBOARD
 };
+
+bool turnOnLED = false;
 
 const char* ap_ssid = "Group6BaseStation";    //Access Point SSID
 const char* ap_password= "group6best"; //Access Point Password
@@ -78,11 +81,22 @@ void loop(){
  WiFiClient client = server.available();               // listen for incoming clients
   if (client) {                                        // if you get a client....                              
     Serial.println("Client Connected...");
+    if(turnOnLED){
+      sendLEDSignal(client);
+    }
     Serial.println(client.readStringUntil('\n'));      // print it out the serial monitor
     client.stop();                                     // stop the client connecting.
     Serial.println("Client Disconnected.");
   }
 }
+
+void sendLEDSignal(WiFiClient client){
+  //'write' command may be wrong need to test
+  client.write("LED: On");
+}
+
+//method to change boolean to true to turn on LED
+// takes input from external device??
 
 //can be used to reset data receiver if communication is lost
 void software_reset()
