@@ -2,10 +2,12 @@
 
 #include <WiFi.h>
 #include "Wire.h"
-
+#include <string.h>
+#include <iostream>  
 #include "hardware/watchdog.h"
 
 void software_reset();
+String* split(String str, char seperator);
 
 String status = "Connected";
 
@@ -72,15 +74,36 @@ void setup() {
   Serial.println("Base Station Started");
   Serial.println();
   Serial.println();
-}
+} 
 
 void loop(){
  WiFiClient client = server.available();               // listen for incoming clients
   if (client) {                                        // if you get a client....                              
     Serial.println("Client Connected...");
-    Serial.println(client.readStringUntil('\n'));      // print it out the serial monitor
-    client.stop();                                     // stop the client connecting.
-    Serial.println("Client Disconnected.");
+    String line = client.readStringUntil('\n');
+    Serial.println(line);
+    if(line[0]=='E'){
+      int lastchar = 3;
+      int nums[4];
+      int n = 0;
+      for(int i = 4;i<line.length();i++){
+        if(line[i] == ','){
+          nums[n] = line.substring(lastchar+1,i).toFloat();
+          lastchar = i;
+          n++;
+        }
+      }
+      nums[n] = line.substring(lastchar+1,line.length()).toFloat();
+      Serial.println(nums[0]);
+      if((int)nums[0]<20){
+        Serial.println("1");
+        client.print("A:1");
+      }
+      else{
+        Serial.println("0");
+        client.print("A:0");
+      }
+    }
   }
 }
 
