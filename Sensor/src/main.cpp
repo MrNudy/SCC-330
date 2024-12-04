@@ -9,7 +9,7 @@
 #include <SD.h>  // File system library
 #include <SPI.h>  // File system for the Pico
 #include "SDCard.h" // SD card class
-#include <Adafruit NeoPixel.h>  
+#include <Adafruit_NeoPixel.h>
 #include <string>
 
 //-- defines OLED screen dimensions ---
@@ -27,7 +27,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 Adafruit_NeoPixel WS2812B(NUM_PIXELS, PIN_WS2812B, NEO_GRB + NEO_KHZ800);
 int LEDPattern = 1;
-string command = "";
+String command = "";
 
 SDCard sdCard;
 bool readFromFile = false;
@@ -232,10 +232,10 @@ void loop() {
 void actuatorMode(){
   while(!connectToBaseStation());
   //if no command stored or new command incoming, try and read new command
-  if(command.empty() || client.read().size() > 0){ //would the read call remove a character from the string if something has been??
+  if(command.length() == 0 || client.read() > 0){ //would the read call remove a character from the string if something has been??
     command = client.readStringUntil('\n');//getting signal from basestation
   }
-  if(command.equals("LED: On")){ ///NEED TO DECIDE ON FORMAT AND PROGRAM SENDING THE SIGNAL INTO BASESTATION
+  if(command.equals("A:0")){ ///NEED TO DECIDE ON FORMAT AND PROGRAM SENDING THE SIGNAL INTO BASESTATION
     turnLEDon();
   }else{
     display.clearDisplay();
@@ -260,7 +260,7 @@ void turnLEDon(){
       delay(DELAY_INTERVAL * 3);
       WS2812B.show();
     }
-    delay(1000)
+    delay(1000);
     for(int i = 0; i < NUM_PIXELS; i ++){
       WS2812B.setPixelColor(i, WS2812B.Color(0 ,0, 0));
       delay(DELAY_INTERVAL * 3);
