@@ -81,9 +81,6 @@ void loop(){
  WiFiClient client = server.available();               // listen for incoming clients
   if (client) {                                        // if you get a client....                              
     Serial.println("Client Connected...");
-    if(turnOnLED){
-      sendLEDSignal(client);
-    }
     Serial.println(client.readStringUntil('\n'));      // print it out the serial monitor
     client.stop();                                     // stop the client connecting.
     Serial.println("Client Disconnected.");
@@ -91,11 +88,11 @@ void loop(){
 }
 
 void sendLEDSignal(WiFiClient client){
-  //'write' command may be wrong need to test
-  client.write("LED: On");
+  //'write' command may be wrong!!
+  client.write("A:0");
 }
 
-//method to change boolean to true to turn on LED
+//method needed to change boolean 'turnOnLED' to true to write to the client
 // takes input from external device??
 
 //can be used to reset data receiver if communication is lost
