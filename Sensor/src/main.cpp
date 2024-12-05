@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include <Arduino.h>
 #include <WiFi.h>
 #include <PDM.h>
@@ -9,6 +11,8 @@
 #include <SD.h>  // File system library
 #include <SPI.h>  // File system for the Pico
 #include "SDCard.h" // SD card class
+#include "SparkFun_LSM6DSV16X.h" // inertial sensor library not available in PlatformIO library
+#include <Adafruit_NeoPixel.h>
 
 //-- defines OLED screen dimensions ---
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -19,6 +23,12 @@
 //creates OLED display object "display"
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+#define PIN_WS2812B 6       //pin number that connects to the LEDs
+#define NUM_PIXELS 3         
+#define DELAY_INTERVAL 500   //should play around to find desired value
+
+Adafruit_NeoPixel WS2812B(NUM_PIXELS, PIN_WS2812B, NEO_GRB + NEO_KHZ800);
+int LEDPattern = 1;
 
 SDCard sdCard;
 bool readFromFile = false;
@@ -27,6 +37,10 @@ bool readFromFile = false;
 #define BLACKButton 13   //connected to pin GP13
 
 #define MOTION_SENSOR 11 //connected to pin GP11
+
+#define BUZZER 7        //connected to pin GP7
+
+#define RELAY 27        //Set relay pin
 
 #define     REMOTE_IP          "192.168.10.1"  //remote server IP which that you want to connect to
 #define     REMOTE_PORT         5263           //connection port provided on remote server 
@@ -75,7 +89,45 @@ bool connectToBaseStation();
 void connectWiFi();
 void sendClimateData();             //For sending enrironment data to BaseStation
 void sendObjectData();              //For sending object usage data to BaseStation
+
+void turnLEDon();
+void turnLEDoff();
+void actuatorMode();
+void changeLEDPattern();
+
 void sendCupData();                 //For sending water usage data to BaseStation
+void computeTiltAndGyro();
+float getAccAngleX();
+void readIMU();
+void calibrateGyro();
+double calculateLiquidLeftCup(double angle);
+float cupRadius = 5; // can be changed for different cup sizes
+float cupHeight = 12.7; // can be changed for different cup sizes
+double cupCapacity = M_PI * pow(cupRadius, 2) * cupHeight;
+double cupContents = cupCapacity; // assume cup starts full;
+int soundIterator = 0;
+
+float gyroRateX = 0.0;
+float gyroRateY = 0.0;
+float gyroRateZ = 0.0;
+float gyroRate = 0.0;
+
+float gyroX = 0.0;
+float gyroY = 0.0;
+float gyroZ = 0.0;
+float gOffX = 0.0;
+float gOffY = 0.0;
+float gOffZ = 0.0;
+
+
+String line;
+
+SparkFun_LSM6DSV16X myLSM;
+
+// Structs for X,Y,Z data
+sfe_lsm_data_t accelData;
+sfe_lsm_data_t gyroData;
+
 void sendZoneTriggeredData();       //For sending zone motion data to BaseStation
 void redButtonPressed();
 void blackButtonPressed();
@@ -168,26 +220,62 @@ void setup() {
     pinMode(REDButton, INPUT);
     pinMode(BLACKButton, INPUT);
     pinMode(MOTION_SENSOR, INPUT);
+    pinMode(BUZZER, OUTPUT);
+    pinMode(RELAY, OUTPUT);
 
     attachInterrupt(REDButton, redButtonPressed, FALLING);
     attachInterrupt(BLACKButton, blackButtonPressed, FALLING);
+
+    if (!myLSM.begin()) //starts inertial measurement sensor
+    {
+        Serial.println("Did not begin, check your wiring and/or I2C address!");
+        while (1);
+    }
+
+    // Reset the device to default settings. This if helpful is you're doing multiple
+    // uploads testing different settings.
+    myLSM.deviceReset();
+
+    // Wait for it to finish resetting
+    while (!myLSM.getDeviceReset())
+    {
+        delay(1);
+    }
+
+    // Accelerometer and Gyroscope registers will not be updated
+    // until read.
+    myLSM.enableBlockDataUpdate();
+
+    // Sets the output data rate and precision of the accelerometer
+    myLSM.setAccelDataRate(LSM6DSV16X_ODR_AT_7Hz5);
+    myLSM.setAccelFullScale(LSM6DSV16X_16g);
+
+    // Sets the output data rate and precision of the gyroscope
+    myLSM.setGyroDataRate(LSM6DSV16X_ODR_AT_15Hz);
+    //myLSM.setGyroFullScale(LSM6DSV16X_2000dps);
+    myLSM.setGyroFullScale(LSM6DSV16X_250dps);
+
+    // Enables filter settling.
+    myLSM.enableFilterSettling();
+
+    // Turns on the accelerometer's filter and apply settings.
+    myLSM.enableAccelLP2Filter();
+    myLSM.setAccelLP2Bandwidth(LSM6DSV16X_XL_STRONG);
+
+    // Turns on the gyroscope's filter and apply settings.
+    myLSM.enableGyroLP1Filter();
+    myLSM.setGyroLP1Bandwidth(LSM6DSV16X_GY_ULTRA_LIGHT);
+    void calibrateGyro();   //calibrates gyroscope 
 }
 
 void loop() {
+  turnLEDoff();
   display.clearDisplay();                 //clears OLED screen
   display.setCursor(0,0);
-  if (client.available() > 0) 
-  {
-    delay(20);
-    //read back one line from the server
-    String line = client.readString();
-      display.println(REMOTE_IP + String(":") + line);
-    Serial.println(REMOTE_IP + String(":") + line);
-  }
   if (Serial.available() > 0)  
   {
     delay(20);
-    String line = Serial.readString();
+    line = Serial.readString();
     client.print(line);
   }
   switch (mode){
@@ -201,7 +289,7 @@ void loop() {
     sendCupData();
     break;
   case ACTUATOR:
-    //code for acting as actuator goes here
+    actuatorMode();
   break;
   case TRIPWIRE:
     sendZoneTriggeredData();
@@ -288,10 +376,134 @@ void sendObjectData(){
   }
 }
 
+
+
+// Cup stuff...
 void sendCupData(){
   while(!connectToBaseStation());
-  //write code here
+  computeTiltAndGyro();
 }
+
+double calcluateLiquidLeftCup(double angle) {
+  double maxFrequency = 8800; // starting frequency
+  double currentMaxContents = cupCapacity * sin(angle * M_PI / 180);
+  if(currentMaxContents > cupCapacity) {
+    cupContents = 0;
+  }
+  if(abs(currentMaxContents) < cupContents) {
+    cupContents = abs(currentMaxContents);
+    double frequencyToPlay = maxFrequency - 6600 * (cupCapacity-cupContents)/cupCapacity;
+    tone(BUZZER, frequencyToPlay);
+    delay(50);
+    tone(BUZZER, frequencyToPlay * 4/3);
+    delay(50);
+    noTone(BUZZER);
+    return cupCapacity - cupContents;
+  }
+  
+  if(soundIterator % 4 == 0) {
+    double frequencyToPlay = maxFrequency - 6600 * (cupCapacity-cupContents)/cupCapacity;
+    tone(BUZZER, frequencyToPlay);
+    delay(50);
+    tone(BUZZER, frequencyToPlay * 4/3);
+    delay(50);
+    noTone(BUZZER);
+    soundIterator = 0;
+  }
+  soundIterator++;
+  return cupCapacity - cupContents;
+}
+
+void computeTiltAndGyro()
+{
+  readIMU();
+  gyroX = gyroData.xData - gOffX;
+  gyroY = gyroData.yData - gOffY;
+  gyroZ = gyroData.zData - gOffZ;
+
+  gyroRateX = (gyroX/131.0)*0.01745329252;
+  gyroRateY = (gyroY/131.0)*0.01745329252;
+  gyroRateZ = (gyroZ/131.0)*0.01745329252;
+
+  gyroRate = sqrt(sq(gyroRateX)+sq(gyroRateX)+sq(gyroRateX));
+
+  double accelAngle = getAccAngleX()*RAD_TO_DEG + 180.0;
+  String angleStr = String(round(accelAngle), 1);
+
+  //display tilt and gyro values values on OLED display
+  display.setCursor(0,0);                //sets cursor to Col = 0, Row = 0
+  display.print(F("Tilt angle: "));
+  display.print(angleStr);
+  display.println(F(" deg"));
+
+  display.setCursor(0,20);                //sets cursor to Col = 0, Row = 20
+
+  display.println(F(""));
+
+
+  double liquidUsed = calcluateLiquidLeftCup(accelAngle);
+  display.print(F("ml used: "));
+  
+  display.print(String(static_cast<int>(round(liquidUsed))));
+
+  display.print("\n\n\nReset: BLACK");
+
+  client.print("C:"+(String)cupContents+"\n");
+
+  display.display();      //this function must be called for the OLED to display values
+
+  delay(150);
+}
+
+float getAccAngleX()
+{
+    float ang = atan2(accelData.yData,accelData.zData);
+    return ang;
+}
+
+//returns accelerometer and gyroscope data
+void readIMU()
+{
+  if (myLSM.checkStatus())
+  {
+    myLSM.getAccel(&accelData);
+    myLSM.getGyro(&gyroData);
+  }
+}
+
+void resetVolume() {
+  cupContents = cupCapacity;
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.println("Re-calibrating...");
+  display.display();
+}
+
+//calibrates gyro
+void calibrateGyro()
+{
+  float gTempX = 0.0;
+  float gTempY = 0.0;
+  float gTempZ = 0.0;
+  int i =0;
+  while(i<200)
+  {
+    delay(10);
+    if (myLSM.checkStatus())
+    {
+      myLSM.getGyro(&gyroData);
+      gTempX += gyroData.xData;
+      gTempY += gyroData.yData;
+      gTempZ += gyroData.zData;
+      i += 1;
+    }
+  }
+  gOffX = gTempX/200.0;
+  gOffY = gTempY/200.0;
+  gOffZ = gTempZ/200.0;
+}
+
+
 
 void sendZoneTriggeredData() {
   motionValue = digitalRead(MOTION_SENSOR);
@@ -320,7 +532,7 @@ void blackButtonPressed(){//Anyone who wants an input for thier sensor mode use 
         changeObject();
       break;
     case CUP:
-        
+        resetVolume();
       break;
     case ACTUATOR:
       
@@ -339,6 +551,7 @@ void blackButtonPressed(){//Anyone who wants an input for thier sensor mode use 
 }
 
 void redButtonPressed(){
+  delay(400);
   changeMode();
 }
 
@@ -454,6 +667,90 @@ void changeZone(){
       display.println("zone error");
   }
   display.display();
+}
+
+
+void actuatorMode(){
+    while(!connectToBaseStation());
+    client.println("A");
+    delay(1000);
+    if (client.available() > 0) {
+      delay(20);
+      //read back one line from the server
+      line = client.readString();
+      //display.println(REMOTE_IP + String(":") + line);
+      Serial.println(REMOTE_IP + String(":") + line);
+      display.display();
+    }
+    display.display();
+    if(line[0]=='A'){
+      switch(line[2]){
+        case '0'://Relay OFF
+          digitalWrite(RELAY, HIGH);
+          display.println("Off");
+        break;
+        case '1'://Relay ON
+          digitalWrite(RELAY, LOW);
+          display.println("On");
+        break;
+        case '2'://LEDs off
+          turnLEDoff();
+        break;
+        case '3'://LEDs Solid all three 'blue off-white' 
+          turnLEDon();
+          LEDPattern = 1;
+        break;
+        case '4'://LEDs one by one 'blue off white' then one by one off
+          turnLEDon();
+          LEDPattern = 2;
+        break;
+        case '5'://LEDs Flash then off
+          turnLEDon();
+          LEDPattern = 3;
+        break;
+        default:
+        break;
+      }
+      display.display();
+    }
+}
+
+void turnLEDon(){
+  if(LEDPattern == 1){
+  //Solid all three 'blue off-white' 
+    for(int i = 0; i < NUM_PIXELS; i ++){
+      WS2812B.setPixelColor(i, WS2812B.Color(80 ,200, 140));
+    }
+    WS2812B.show();
+  }else if (LEDPattern == 2)
+  {
+    //one by one 'blue off white' then one by one off
+    for(int i = 0; i < NUM_PIXELS; i ++){
+      WS2812B.setPixelColor(i, WS2812B.Color(80 ,200, 140));
+      delay(DELAY_INTERVAL * 3);
+      WS2812B.show();
+    }
+    delay(1000);
+    for(int i = 0; i < NUM_PIXELS; i ++){
+      WS2812B.setPixelColor(i, WS2812B.Color(0 ,0, 0));
+      delay(DELAY_INTERVAL * 3);
+      WS2812B.show();
+    }
+  }else if (LEDPattern == 3)
+  {
+    //Flash then off
+    for(int i = 0; i < NUM_PIXELS; i ++){
+      WS2812B.setPixelColor(i, WS2812B.Color(80 ,200, 140));
+    }
+    WS2812B.show();
+    delay(DELAY_INTERVAL);
+    WS2812B.clear();
+  }
+}
+
+//may become redundant...
+void turnLEDoff(){
+  WS2812B.clear();
 }
 
 bool connectToBaseStation(){
