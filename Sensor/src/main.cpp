@@ -12,6 +12,7 @@
 #include <SPI.h>  // File system for the Pico
 #include "SDCard.h" // SD card class
 #include "SparkFun_LSM6DSV16X.h" // inertial sensor library not available in PlatformIO library
+#include <Adafruit_NeoPixel.h>
 
 //-- defines OLED screen dimensions ---
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -22,6 +23,12 @@
 //creates OLED display object "display"
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+#define PIN_WS2812B 6       //pin number that connects to the LEDs
+#define NUM_PIXELS 3         
+#define DELAY_INTERVAL 500   //should play around to find desired value
+
+Adafruit_NeoPixel WS2812B(NUM_PIXELS, PIN_WS2812B, NEO_GRB + NEO_KHZ800);
+int LEDPattern = 1;
 
 SDCard sdCard;
 bool readFromFile = false;
@@ -82,6 +89,11 @@ bool connectToBaseStation();
 void connectWiFi();
 void sendClimateData();             //For sending enrironment data to BaseStation
 void sendObjectData();              //For sending object usage data to BaseStation
+
+void turnLEDon();
+void turnLEDoff();
+void actuatorMode();
+void changeLEDPattern();
 
 void sendCupData();                 //For sending water usage data to BaseStation
 void computeTiltAndGyro();
@@ -257,16 +269,9 @@ void setup() {
 }
 
 void loop() {
+  turnLEDoff();
   display.clearDisplay();                 //clears OLED screen
   display.setCursor(0,0);
-  if (client.available() > 0) 
-  {
-    delay(20);
-    //read back one line from the server
-    line = client.readString();
-      display.println(REMOTE_IP + String(":") + line);
-    Serial.println(REMOTE_IP + String(":") + line);
-  }
   if (Serial.available() > 0)  
   {
     delay(20);
@@ -284,18 +289,7 @@ void loop() {
     sendCupData();
     break;
   case ACTUATOR:
-    if(line[0]=='A'){
-      switch(line[2]){
-        case 0:
-          digitalWrite(RELAY, HIGH);
-        break;
-        case 1:
-          digitalWrite(RELAY, LOW);
-        break;
-        default:
-        break;
-      }
-    }
+    actuatorMode();
   break;
   case TRIPWIRE:
     sendZoneTriggeredData();
@@ -673,6 +667,90 @@ void changeZone(){
       display.println("zone error");
   }
   display.display();
+}
+
+
+void actuatorMode(){
+    while(!connectToBaseStation());
+    client.println("A");
+    delay(1000);
+    if (client.available() > 0) {
+      delay(20);
+      //read back one line from the server
+      line = client.readString();
+      //display.println(REMOTE_IP + String(":") + line);
+      Serial.println(REMOTE_IP + String(":") + line);
+      display.display();
+    }
+    display.display();
+    if(line[0]=='A'){
+      switch(line[2]){
+        case '0'://Relay OFF
+          digitalWrite(RELAY, HIGH);
+          display.println("Off");
+        break;
+        case '1'://Relay ON
+          digitalWrite(RELAY, LOW);
+          display.println("On");
+        break;
+        case '2'://LEDs off
+          turnLEDoff();
+        break;
+        case '3'://LEDs Solid all three 'blue off-white' 
+          turnLEDon();
+          LEDPattern = 1;
+        break;
+        case '4'://LEDs one by one 'blue off white' then one by one off
+          turnLEDon();
+          LEDPattern = 2;
+        break;
+        case '5'://LEDs Flash then off
+          turnLEDon();
+          LEDPattern = 3;
+        break;
+        default:
+        break;
+      }
+      display.display();
+    }
+}
+
+void turnLEDon(){
+  if(LEDPattern == 1){
+  //Solid all three 'blue off-white' 
+    for(int i = 0; i < NUM_PIXELS; i ++){
+      WS2812B.setPixelColor(i, WS2812B.Color(80 ,200, 140));
+    }
+    WS2812B.show();
+  }else if (LEDPattern == 2)
+  {
+    //one by one 'blue off white' then one by one off
+    for(int i = 0; i < NUM_PIXELS; i ++){
+      WS2812B.setPixelColor(i, WS2812B.Color(80 ,200, 140));
+      delay(DELAY_INTERVAL * 3);
+      WS2812B.show();
+    }
+    delay(1000);
+    for(int i = 0; i < NUM_PIXELS; i ++){
+      WS2812B.setPixelColor(i, WS2812B.Color(0 ,0, 0));
+      delay(DELAY_INTERVAL * 3);
+      WS2812B.show();
+    }
+  }else if (LEDPattern == 3)
+  {
+    //Flash then off
+    for(int i = 0; i < NUM_PIXELS; i ++){
+      WS2812B.setPixelColor(i, WS2812B.Color(80 ,200, 140));
+    }
+    WS2812B.show();
+    delay(DELAY_INTERVAL);
+    WS2812B.clear();
+  }
+}
+
+//may become redundant...
+void turnLEDoff(){
+  WS2812B.clear();
 }
 
 bool connectToBaseStation(){

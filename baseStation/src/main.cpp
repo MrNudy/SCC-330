@@ -41,6 +41,8 @@ IPAddress IP;
 
 //Specifying the Webserver instance to connect with HTTP Port: 80
 WiFiServer server(5263);
+
+String actuatorBuffer;
  
 void setup() {
   //Start the serial communication channel
@@ -93,18 +95,18 @@ void loop(){
         }
       }
       nums[n] = line.substring(lastchar+1,line.length()).toFloat();
-      Serial.println(nums[0]);
       if((int)nums[0]<20){
         Serial.println("1");
-        client.print("A:1");
+        actuatorBuffer = "A:1";//GP1 on
       }
       else{
         Serial.println("0");
-        client.print("A:0");
+        actuatorBuffer = "A:0";//GP1 off
       }
     }
     if(line[0]=='A'){
-      client.print("A:0");
+      Serial.println("Actuator mode send");
+      client.println(actuatorBuffer);
     }
   }
 }
