@@ -7,7 +7,6 @@
 #include "hardware/watchdog.h"
 
 void software_reset();
-String* split(String str, char seperator);
 
 String status = "Connected";
 
@@ -103,6 +102,9 @@ void loop(){
         Serial.println("0");
         client.print("A:0");
       }
+    }
+    if(line[0]=='A'){
+      client.print("A:0");
     }
   }
 }
