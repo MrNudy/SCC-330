@@ -52,7 +52,7 @@ enum SENSOR_MODE {
     OBJECT,
     CUP,
     ACTUATOR,
-    TRIPWIRE
+    PERSON
 };
 SENSOR_MODE mode = ENVIRONMENT;
 
@@ -131,6 +131,7 @@ sfe_lsm_data_t accelData;
 sfe_lsm_data_t gyroData;
 
 void sendZoneTriggeredData();       //For sending zone motion data to BaseStation
+void sendLocationData();            //For sending live location data to BaseStation
 void redButtonPressed();
 void blackButtonPressed();
 void changeMode();                  //On button press change sensor mode
@@ -138,6 +139,20 @@ void onPDMdata();
 float readSoundSamples();
 void changeZone();                  //for use in Tripwire mode
 void changeObject();                //for use in Object mode
+
+const float accessPointPositions[6][2] = {
+  {1908, 0},
+  {1603, 768},
+  {1353, 0},
+  {850, 0},
+  {550, 768},
+  {200, 0}
+};
+float RSSIPosition[20][2];
+int readingsIterator = 0;
+
+float RSSIsForAverage[20];
+int tempIterator = 0;
 
 void setup() {
     Wire.begin();         //Initializes the Wire library and join the I2C bus as a controller
@@ -293,8 +308,8 @@ void loop() {
   case ACTUATOR:
     actuatorMode();
   break;
-  case TRIPWIRE:
-    sendZoneTriggeredData();
+  case PERSON:
+    sendLocationData();
     break;
   default:
     display.clearDisplay();
@@ -310,6 +325,47 @@ void displayData(String dataLine){
   display.setCursor(0,0);
   display.println(dataLine);
   display.display();
+}
+
+const char *macToString(uint8_t mac[6]) {
+  static char s[20];
+  sprintf(s, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  return s;
+}
+
+const char *encToString(uint8_t enc) {
+  switch (enc) {
+    case ENC_TYPE_NONE: return "NONE";
+    case ENC_TYPE_TKIP: return "WPA";
+    case ENC_TYPE_CCMP: return "WPA2";
+    case ENC_TYPE_AUTO: return "AUTO";
+  }
+  return "UNKN";
+}
+
+double distanceFromRSSI(int RSSI) {
+  float strength1m = -40;
+  float n = 1.29; // path loss exponent - rough assumption for now
+  return pow(10, (strength1m - RSSI) / (10 * n));
+}
+
+void calculatePosition(int rssiValues[6], float& xPos, float& zPos) {
+  float distances[6];
+  for(int i = 0; i < 6; i++)
+    distances[i] = distanceFromRSSI(rssiValues[i]);
+
+  // will use weighted average of positions using inverse distance squared
+  float sumX = 0;
+  float sumY = 0;
+  float sumWeight = 0;
+  for(int i = 0; i < 6; i++) {
+    float weight = 1 / (distances[i] * distances[i]); // inverse square
+    sumX += accessPointPositions[i][0] * weight;
+    sumY += accessPointPositions[i][1] * weight;
+    sumWeight += weight;
+  }
+  xPos = sumX / sumWeight;
+  zPos = sumY / sumWeight;
 }
 
 void sendClimateData()
@@ -521,22 +577,72 @@ void calibrateGyro()
 }
 
 
+void sendLocationData() {
+  Serial.printf("Beginning scan at %lu\n", millis());
+  auto cnt = WiFi.scanNetworks();
+  if (!cnt) {
+    Serial.printf("No networks found\n");
+  } else {
+    int rssiValues[6];
 
+    Serial.printf("Found %d networks\n\n", cnt);
+    Serial.printf("%32s %5s %17s %2s %4s\n", "SSID", "ENC", "BSSID        ", "CH", "RSSI");
+    for(int i = 0; i < cnt; i++) {
+      uint8_t bssid[6];
+      if(strncmp(WiFi.SSID(i), "SATB074", strlen("SATB074")) == 0) {
+        WiFi.BSSID(i, bssid);
+        int thisRSSI = WiFi.RSSI(i);
+        if(WiFi.SSID(i)[strlen(WiFi.SSID(i))-1] == '1')
+          rssiValues[0] = thisRSSI;
+        if(WiFi.SSID(i)[strlen(WiFi.SSID(i))-1] == '2')
+          rssiValues[1] = thisRSSI;
+        if(WiFi.SSID(i)[strlen(WiFi.SSID(i))-1] == '3') 
+          rssiValues[2] = thisRSSI;
+        if(WiFi.SSID(i)[strlen(WiFi.SSID(i))-1] == '4') 
+          rssiValues[3] = thisRSSI;
+        if(WiFi.SSID(i)[strlen(WiFi.SSID(i))-1] == '5') 
+          rssiValues[4] = thisRSSI;
+        if(WiFi.SSID(i)[strlen(WiFi.SSID(i))-1] == '6') 
+          rssiValues[5] = thisRSSI;
 
-void sendZoneTriggeredData() {
-  motionValue = digitalRead(MOTION_SENSOR);
-  if (motionValue == HIGH) {
-    if (pirState == LOW) {
-      pirState = HIGH;
-      while(!connectToBaseStation());
-      client.print("T:" + String(zone) + "\n");
+        const char *thisSSID = WiFi.SSID(i);
+        Serial.printf("%32s %5s %17s %2d %4ld\n", WiFi.SSID(i), encToString(WiFi.encryptionType(i)), macToString(bssid), WiFi.channel(i), WiFi.RSSI(i));
+        display.print(String(WiFi.SSID(i)));
+        display.print(F(" "));
+        display.println(WiFi.RSSI(i));
+      }    
     }
-  }
-  else {
-    if (pirState == HIGH) {
-      pirState = LOW;
+
+  
+    float xPos, zPos;
+    calculatePosition(rssiValues, xPos, zPos);
+    RSSIPosition[readingsIterator][0] = xPos;
+    RSSIPosition[readingsIterator][1] = zPos;
+
+    for(int i = 0; i < sizeof(RSSIPosition)/sizeof(RSSIPosition[0]); i++) {
+      if(RSSIPosition[i] == NULL) {
+        readingsIterator = (readingsIterator + 1) % 20;
+        continue;
+      }
     }
+
+    float totalXPos = 0;
+    float totalZPos = 0;
+    for(int i = 0; i < 20; i++) {
+      totalXPos += RSSIPosition[i][0];
+      totalZPos += RSSIPosition[i][1];
+    }
+    float averageXPos = totalXPos / 20;
+    float averageZPos = totalZPos / 20;
+
+    Serial.printf("User Position: X = %.2f, Y = %.2f\n", averageXPos, averageZPos);
+    display.printf("X:%.2f Z:%.2f\n", averageXPos, averageZPos);
+    display.display();
+
+    readingsIterator = (readingsIterator + 1) % 20;
   }
+  Serial.printf("\n--- Sleeping ---\n\n\n");
+  delay(500);
 }
 
 void blackButtonPressed(){//Anyone who wants an input for thier sensor mode use the black button
@@ -555,7 +661,7 @@ void blackButtonPressed(){//Anyone who wants an input for thier sensor mode use 
     case ACTUATOR:
       
      break;
-    case TRIPWIRE:
+    case PERSON:
     case ENVIRONMENT:
         changeZone();
       break;
@@ -621,10 +727,10 @@ void changeMode() {
     display.println("actuator mode");
     break;
   case ACTUATOR:
-    mode = TRIPWIRE;
-    display.println("tripwire mode");
+    mode = PERSON;
+    display.println("stalk mode");
     break;
-  case TRIPWIRE:
+  case PERSON:
     mode = ENVIRONMENT;
     display.println("environment mode");
     break;
