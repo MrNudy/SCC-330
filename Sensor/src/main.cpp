@@ -103,7 +103,9 @@ void calibrateGyro();
 double calculateLiquidLeftCup(double angle);
 float cupRadius = 5; // can be changed for different cup sizes
 float cupHeight = 12.7; // can be changed for different cup sizes
-double cupCapacity = M_PI * pow(cupRadius, 2) * cupHeight;
+double cupCapacity = 500; // just assume 500
+double startingContents = cupCapacity;
+
 double cupContents = cupCapacity; // assume cup starts full;
 int soundIterator = 0;
 
@@ -377,32 +379,43 @@ void sendObjectData(){
 }
 
 
-
-// Cup stuff...
 void sendCupData(){
   while(!connectToBaseStation());
   computeTiltAndGyro();
 }
 
 double calcluateLiquidLeftCup(double angle) {
-  double maxFrequency = 8800; // starting frequency
-  double currentMaxContents = cupCapacity * sin(angle * M_PI / 180);
-  if(currentMaxContents > cupCapacity) {
+  double maxFrequency = 6000; // starting frequency
+  double currentMaxContents = cupCapacity * sin(angle * M_PI / 180); // current maximum contents based on angle
+  int mlUsed = 0;
+  if(angle >= 180) { // cup is upside-down and cannot hold any water 
     cupContents = 0;
+    if(soundIterator % 4 == 0) {
+      double frequencyToPlay = maxFrequency - 5200 * cupContents/cupCapacity;
+      tone(BUZZER, frequencyToPlay);
+      delay(50);
+      tone(BUZZER, frequencyToPlay * 4/3);
+      delay(50);
+      noTone(BUZZER);
+      soundIterator = 0;
+    }
+    soundIterator++;
+    return startingContents;
   }
+
   if(abs(currentMaxContents) < cupContents) {
     cupContents = abs(currentMaxContents);
-    double frequencyToPlay = maxFrequency - 6600 * (cupCapacity-cupContents)/cupCapacity;
+    double frequencyToPlay = maxFrequency - 5200 * cupContents/cupCapacity;
     tone(BUZZER, frequencyToPlay);
     delay(50);
     tone(BUZZER, frequencyToPlay * 4/3);
     delay(50);
     noTone(BUZZER);
-    return cupCapacity - cupContents;
+    return startingContents - cupContents;
   }
   
   if(soundIterator % 4 == 0) {
-    double frequencyToPlay = maxFrequency - 6600 * (cupCapacity-cupContents)/cupCapacity;
+    double frequencyToPlay = maxFrequency - 5200 * cupContents/cupCapacity;
     tone(BUZZER, frequencyToPlay);
     delay(50);
     tone(BUZZER, frequencyToPlay * 4/3);
@@ -411,7 +424,7 @@ double calcluateLiquidLeftCup(double angle) {
     soundIterator = 0;
   }
   soundIterator++;
-  return cupCapacity - cupContents;
+  return startingContents - cupContents;
 }
 
 void computeTiltAndGyro()
@@ -433,18 +446,14 @@ void computeTiltAndGyro()
   //display tilt and gyro values values on OLED display
   display.setCursor(0,0);                //sets cursor to Col = 0, Row = 0
   display.print(F("Tilt angle: "));
-  display.print(angleStr);
+  display.print(angleStr.substring(0, angleStr.length() - 2));
   display.println(F(" deg"));
-
-  display.setCursor(0,20);                //sets cursor to Col = 0, Row = 20
-
-  display.println(F(""));
 
 
   double liquidUsed = calcluateLiquidLeftCup(accelAngle);
   display.print(F("ml used: "));
   
-  display.print(String(static_cast<int>(round(liquidUsed))));
+  display.print(static_cast<int>(round(liquidUsed)));
 
   display.print("\n\n\nReset: BLACK");
 
@@ -471,12 +480,20 @@ void readIMU()
   }
 }
 
-void resetVolume() {
-  cupContents = cupCapacity;
+void resetCup() {
   display.clearDisplay();
   display.setCursor(0,0);
   display.println("Re-calibrating...");
   display.display();
+
+  double accelAngle = getAccAngleX()*RAD_TO_DEG + 180.0;
+  startingContents = cupCapacity * sin(accelAngle * M_PI / 180);
+  if(startingContents < 0) {
+    startingContents = 0;
+    cupContents = 0;
+  }
+  else  
+    cupContents = startingContents;
 }
 
 //calibrates gyro
@@ -502,6 +519,7 @@ void calibrateGyro()
   gOffY = gTempY/200.0;
   gOffZ = gTempZ/200.0;
 }
+
 
 
 
@@ -532,7 +550,7 @@ void blackButtonPressed(){//Anyone who wants an input for thier sensor mode use 
         changeObject();
       break;
     case CUP:
-        resetVolume();
+        resetCup();
       break;
     case ACTUATOR:
       
