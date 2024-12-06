@@ -2,7 +2,8 @@
 
 #include <WiFi.h>
 #include "Wire.h"
-
+#include <string.h>
+#include <iostream>  
 #include "hardware/watchdog.h"
 
 void software_reset();
@@ -40,11 +41,13 @@ IPAddress IP;
 
 //Specifying the Webserver instance to connect with HTTP Port: 80
 WiFiServer server(5263);
+
+String actuatorBuffer;
  
 void setup() {
   //Start the serial communication channel
   Serial.begin(115200);
-  while (!Serial); // Wait until serial is available
+  // while (!Serial); // Wait until serial is available
   sleep_ms(6);//added because this is the minimum time I found that gets all serial message to print(no idea why the line above doesn't fully work)
  
   WiFi.mode(WIFI_AP);
@@ -72,15 +75,39 @@ void setup() {
   Serial.println("Base Station Started");
   Serial.println();
   Serial.println();
-}
+} 
 
 void loop(){
  WiFiClient client = server.available();               // listen for incoming clients
   if (client) {                                        // if you get a client....                              
     Serial.println("Client Connected...");
-    Serial.println(client.readStringUntil('\n'));      // print it out the serial monitor
-    client.stop();                                     // stop the client connecting.
-    Serial.println("Client Disconnected.");
+    String line = client.readStringUntil('\n');
+    Serial.println(line);
+    if(line[0]=='E'){
+      int lastchar = 3;
+      int nums[4];
+      int n = 0;
+      for(int i = 4;i<line.length();i++){
+        if(line[i] == ','){
+          nums[n] = line.substring(lastchar+1,i).toFloat();
+          lastchar = i;
+          n++;
+        }
+      }
+      nums[n] = line.substring(lastchar+1,line.length()).toFloat();
+      if((int)nums[0]<20){
+        Serial.println("1");
+        actuatorBuffer = "A:1";//GP1 on
+      }
+      else{
+        Serial.println("0");
+        actuatorBuffer = "A:0";//GP1 off
+      }
+    }
+    if(line[0]=='A'){
+      Serial.println("Actuator mode send");
+      client.println(actuatorBuffer);
+    }
   }
 }
 
